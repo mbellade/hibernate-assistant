@@ -7,7 +7,6 @@ import java.util.regex.Pattern;
 import org.hibernate.Session;
 import org.hibernate.metamodel.model.domain.JpaMetamodel;
 import org.hibernate.metamodel.model.domain.ManagedDomainType;
-import org.hibernate.query.SelectionQuery;
 
 import org.jboss.logging.Logger;
 
@@ -161,6 +160,17 @@ public class HibernateAssistant {
 		log.infof( "Extracted HQL: %s", hql );
 
 		return AiQuery.from( hql, resultClass, session );
+	}
+
+	private static <T> ManagedType<T> findManagedType(Class<T> type, Metamodel metamodel) {
+		// todo : we can possibly remove dependence on Hibernate and just use JPA apis
+		try {
+			return metamodel.managedType( type );
+		}
+		catch (Exception e) {
+			// ignore the exception and return null
+			return null;
+		}
 	}
 
 	record HqlHolder(String hqlQuery) {
