@@ -4,7 +4,6 @@ import org.hibernate.assistant.domain.Address;
 import org.hibernate.assistant.domain.Company;
 
 import org.hibernate.testing.orm.junit.DomainModel;
-import org.hibernate.testing.orm.junit.EntityManagerFactoryScope;
 import org.hibernate.testing.orm.junit.SessionFactory;
 import org.hibernate.testing.orm.junit.SessionFactoryScope;
 import org.junit.jupiter.api.AfterAll;
@@ -39,11 +38,11 @@ public class ContentRetrieverTest {
 
 	@Test
 	public void simpleRagTest(SessionFactoryScope scope) {
-		final HibernateContentRetriever contentRetriever = new HibernateContentRetriever(
-				chatModel,
-				chatMemory,
-				scope.getSessionFactory()
-		);
+		final HibernateContentRetriever contentRetriever = HibernateContentRetriever.builder()
+				.chatModel( chatModel )
+				.chatMemory( chatMemory )
+				.sessionFactory( scope.getSessionFactory() )
+				.build();
 		final RetrievalAugmentor rag = DefaultRetrievalAugmentor.builder()
 				.contentRetriever( contentRetriever )
 				.contentInjector( DefaultContentInjector.builder().promptTemplate( INJECTOR_PROMPT_TEMPLATE ).build() )

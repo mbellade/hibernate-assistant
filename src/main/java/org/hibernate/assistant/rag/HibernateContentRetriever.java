@@ -16,6 +16,7 @@ import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
 
+import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 
@@ -36,12 +37,43 @@ public class HibernateContentRetriever implements ContentRetriever {
 					Answer the original question using natural language and do not create a query!"""
 	);
 
+	public static class Builder {
+		private ChatLanguageModel chatModel;
+		private ChatMemory chatMemory;
+		private PromptTemplate metamodelPromptTemplate;
+		private SessionFactory sessionFactory;
+
+		public Builder chatModel(ChatLanguageModel chatModel) {
+			this.chatModel = chatModel;
+			return this;
+		}
+
+		public Builder chatMemory(ChatMemory chatMemory) {
+			this.chatMemory = chatMemory;
+			return this;
+		}
+
+		public Builder metamodelPromptTemplate(PromptTemplate metamodelPromptTemplate) {
+			this.metamodelPromptTemplate = metamodelPromptTemplate;
+			return this;
+		}
+
+		public Builder sessionFactory(SessionFactory sessionFactory) {
+			this.sessionFactory = sessionFactory;
+			return this;
+		}
+
+		public HibernateContentRetriever build() {
+			return new HibernateContentRetriever( this );
+		}
+	}
+
 	private final HibernateAssistant assistant;
 	private final SessionFactoryImplementor sessionFactory;
 
 	public HibernateContentRetriever(HibernateAssistant assistant, SessionFactory sessionFactory) {
-		this.assistant = assistant;
-		this.sessionFactory = (SessionFactoryImplementor) sessionFactory;
+		this.assistant = ensureNotNull( assistant, "Metamodel" );
+		this.sessionFactory = (SessionFactoryImplementor) ensureNotNull( sessionFactory, "Session Factory" );
 	}
 
 	public HibernateContentRetriever(
@@ -74,6 +106,10 @@ public class HibernateContentRetriever implements ContentRetriever {
 		);
 	}
 
+	private HibernateContentRetriever(Builder builder) {
+		this( builder.chatModel, builder.chatMemory, builder.metamodelPromptTemplate, builder.sessionFactory );
+	}
+
 	@Override
 	public List<Content> retrieve(Query naturalLanguageQuery) {
 		// todo we could implement retries, and pass the error message to the chat model
@@ -95,5 +131,9 @@ public class HibernateContentRetriever implements ContentRetriever {
 		} );
 
 		return result == null ? emptyList() : singletonList( Content.from( result ) );
+	}
+
+	public static Builder builder() {
+		return new Builder();
 	}
 }

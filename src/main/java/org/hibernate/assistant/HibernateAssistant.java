@@ -8,6 +8,8 @@ import java.util.regex.Pattern;
 
 import org.hibernate.Internal;
 import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.assistant.rag.HibernateContentRetriever;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.internal.util.EntityPrinter;
 import org.hibernate.metamodel.model.domain.JpaMetamodel;
@@ -20,6 +22,7 @@ import org.jboss.logging.Logger;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.langchain4j.chain.ConversationalRetrievalChain;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.ChatMemory;
@@ -32,6 +35,9 @@ import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.input.PromptTemplate;
 import dev.langchain4j.model.ollama.OllamaChatModel;
+import dev.langchain4j.rag.DefaultRetrievalAugmentor;
+import dev.langchain4j.rag.RetrievalAugmentor;
+import dev.langchain4j.rag.content.injector.DefaultContentInjector;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EmbeddableType;
 import jakarta.persistence.metamodel.EntityType;
@@ -48,6 +54,7 @@ import static dev.langchain4j.internal.Utils.getOrDefault;
 import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
 import static dev.langchain4j.model.chat.Capability.RESPONSE_FORMAT_JSON_SCHEMA;
 import static dev.langchain4j.model.chat.request.ResponseFormatType.JSON;
+import static org.hibernate.assistant.rag.HibernateContentRetriever.INJECTOR_PROMPT_TEMPLATE;
 
 /**
  * Hibernate interface that allows interacting with an LLM through LangChain4J.
@@ -78,18 +85,13 @@ public class HibernateAssistant {
 	}
 
 	public static class Builder {
-		private Metamodel metamodel;
 		private ChatLanguageModel chatModel;
 		private ChatMemory chatMemory;
+		private Metamodel metamodel;
 		private PromptTemplate metamodelPromptTemplate;
 		private boolean structuredJson = true;
 
 		private Builder() {
-		}
-
-		public Builder metamodel(Metamodel metamodel) {
-			this.metamodel = metamodel;
-			return this;
 		}
 
 		public Builder chatModel(ChatLanguageModel chatModel) {
@@ -99,6 +101,11 @@ public class HibernateAssistant {
 
 		public Builder chatMemory(ChatMemory chatMemory) {
 			this.chatMemory = chatMemory;
+			return this;
+		}
+
+		public Builder metamodel(Metamodel metamodel) {
+			this.metamodel = metamodel;
 			return this;
 		}
 
@@ -124,13 +131,7 @@ public class HibernateAssistant {
 		}
 
 		public HibernateAssistant build() {
-			return new HibernateAssistant(
-					getOrDefault( chatModel, Builder::defaultChatLanguageModel ),
-					getOrDefault( chatMemory, Builder::defaultChatMemory ),
-					getOrDefault( metamodelPromptTemplate, METAMODEL_PROMPT_TEMPLATE ),
-					ensureNotNull( metamodel, "Metamodel" ),
-					structuredJson
-			);
+			return new HibernateAssistant( this );
 		}
 
 		private static ChatLanguageModel defaultChatLanguageModel() {
@@ -175,11 +176,31 @@ public class HibernateAssistant {
 	private final JpaMetamodel metamodel;
 	private final boolean structuredJson;
 
-	private HibernateAssistant(
+	public HibernateAssistant(ChatLanguageModel chatModel, ChatMemory chatMemory, Metamodel metamodel) {
+		this( chatModel, chatMemory, metamodel, METAMODEL_PROMPT_TEMPLATE, true );
+	}
+
+	public HibernateAssistant(
 			ChatLanguageModel chatModel,
 			ChatMemory chatMemory,
-			PromptTemplate metamodelPromptTemplate,
 			Metamodel metamodel,
+			PromptTemplate metamodelPromptTemplate) {
+		this( chatModel, chatMemory, metamodel, metamodelPromptTemplate, true );
+	}
+
+	public HibernateAssistant(
+			ChatLanguageModel chatModel,
+			ChatMemory chatMemory,
+			Metamodel metamodel,
+			boolean structuredJson) {
+		this( chatModel, chatMemory, metamodel, METAMODEL_PROMPT_TEMPLATE, structuredJson );
+	}
+
+	public HibernateAssistant(
+			ChatLanguageModel chatModel,
+			ChatMemory chatMemory,
+			Metamodel metamodel,
+			PromptTemplate metamodelPromptTemplate,
 			boolean structuredJson) {
 		this.chatModel = chatModel;
 		this.chatMemory = chatMemory;
@@ -197,6 +218,16 @@ public class HibernateAssistant {
 
 //		this.service = AiServices.create( AiQueryService.class, chatModel );
 //		service.chat( metamodelPrompt );
+	}
+
+	private HibernateAssistant(Builder builder) {
+		this(
+				getOrDefault( builder.chatModel, Builder::defaultChatLanguageModel ),
+				getOrDefault( builder.chatMemory, Builder::defaultChatMemory ),
+				ensureNotNull( builder.metamodel, "Metamodel" ),
+				getOrDefault( builder.metamodelPromptTemplate, METAMODEL_PROMPT_TEMPLATE ),
+				builder.structuredJson
+		);
 	}
 
 	private static SystemMessage getMetamodelPrompt(PromptTemplate metamodelPromptTemplate, Metamodel metamodel) {
@@ -281,12 +312,49 @@ public class HibernateAssistant {
 	}
 
 	/**
+	 * Calls the {@link ChatLanguageModel} with the provided message and tries to answer it with
+	 * data from the current domain metamodel. You can also use this retrieval-augmented generation
+	 * yourself with the {@link org.hibernate.assistant.rag.HibernateContentRetriever} that
+	 * directly interfaces with LangChain4J's {@link dev.langchain4j.rag.RetrievalAugmentor} APIs.
+	 * <p>
+	 * Note that this requires the assistant's {@link ChatMemory} to be able to store at least 3 messages:
+	 * the base mapping model system message, the initial request to create the query and the String
+	 * representation of the query results.
+	 *
+	 * @param message the natural language request
+	 * @param sessionFactory Hibernate's session factory
+	 *
+	 * @return a natural language response based on the results of the query
+	 */
+	public String executeQuery(String message, SessionFactory sessionFactory) {
+		final HibernateContentRetriever contentRetriever = new HibernateContentRetriever(
+				this,
+				sessionFactory
+		);
+
+		final RetrievalAugmentor rag = DefaultRetrievalAugmentor.builder()
+				.contentRetriever( contentRetriever )
+				.contentInjector( DefaultContentInjector.builder().promptTemplate( INJECTOR_PROMPT_TEMPLATE ).build() )
+				.build();
+		final ConversationalRetrievalChain chain = ConversationalRetrievalChain.builder()
+				.chatLanguageModel( chatModel )
+				.chatMemory( chatMemory )
+				.retrievalAugmentor( rag )
+				.build();
+
+		return chain.execute( message );
+	}
+
+	/**
 	 * Executes the given {@link AiQuery} as a {@link org.hibernate.query.SelectionQuery}, and provides
 	 * a natural language response by giving the results back to the {@link ChatLanguageModel}.
 	 * <p>
 	 * Note that this requires the assistant's {@link ChatMemory} to be able to store at least 3 messages:
 	 * the base mapping model system message, the initial request to create the query and the String
 	 * representation of the query results.
+	 * <p>
+	 * To directly obtain a natural language response from a natural language request,
+	 * you can use {@link #executeQuery(String, SessionFactory)} instead.
 	 * <p>
 	 * If you wish to execute the query directly and obtain the results yourself, you should use
 	 * {@link AiQuery#createSelectionQuery()} or {@link AiQuery#getResultList()}.
@@ -298,7 +366,6 @@ public class HibernateAssistant {
 	 */
 	public String executeQuery(AiQuery<?> query, Session session) {
 		final String result = executeQueryToString( query, session );
-
 
 		final String prompt = "The query returned the following data:\n" + result +
 				// this seems to be needed, otherwise with some models we just get an HQL query
