@@ -1,4 +1,4 @@
-package org.example;
+package org.hibernate.assistant;
 
 import java.util.List;
 
@@ -9,8 +9,8 @@ import org.hibernate.testing.orm.junit.Jpa;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import org.example.domain.Address;
-import org.example.domain.Company;
+import org.hibernate.assistant.domain.Address;
+import org.hibernate.assistant.domain.Company;
 
 @Jpa(annotatedClasses = { Company.class, Address.class })
 public class SimpleTest {

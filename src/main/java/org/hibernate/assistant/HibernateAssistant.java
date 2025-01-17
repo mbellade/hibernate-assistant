@@ -1,4 +1,4 @@
-package org.example;
+package org.hibernate.assistant;
 
 import java.util.ArrayList;
 import java.util.List;
