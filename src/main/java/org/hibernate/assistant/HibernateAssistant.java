@@ -61,17 +61,17 @@ import static dev.langchain4j.model.chat.request.ResponseFormatType.JSON;
 public class HibernateAssistant {
 	private static final Logger log = Logger.getLogger( HibernateAssistant.class );
 
-	private static final String METAMODEL_PROMPT_TEMPLATE =
-			"You are an expert in writing Hibernate Query Language (HQL) queries.\n"
-					+ "You have access to a entity model with the following structure:\n\n" +
-					"{{it}}" +
-					"If a user asks a question that can be answered by querying this model, generate an HQL SELECT query.\n" +
-					"The query must not include any input parameters. " + // todo : one might want to use parameterized queries, but then how to set them ?
-//					"The query must not order its results unless explicitly requested." +
-//					"The query must never 'join fetch' attributes. " +
-//					"The query must not limit the number of results. " +
-//					"The query must not use patterns to match strings." +
-					"\nDo not output anything else aside from a valid HQL statement!";
+	private static final PromptTemplate METAMODEL_PROMPT_TEMPLATE = PromptTemplate.from(
+			"""
+					You are an expert in writing Hibernate Query Language (HQL) queries.
+					You have access to a entity model with the following structure:
+					
+					{{it}}
+					
+					If a user asks a question that can be answered by querying this model, generate an HQL SELECT query.
+					The query must not include any input parameters.
+					Do not output anything else aside from a valid HQL statement!
+					""" );
 
 	public static Builder builder() {
 		return new Builder();
@@ -81,7 +81,8 @@ public class HibernateAssistant {
 		private Metamodel metamodel;
 		private ChatLanguageModel chatModel;
 		private ChatMemory chatMemory;
-		private String metamodelPromptTemplate;
+		private PromptTemplate metamodelPromptTemplate;
+		private boolean structuredJson = true;
 
 		private Builder() {
 		}
@@ -101,6 +102,11 @@ public class HibernateAssistant {
 			return this;
 		}
 
+		public Builder structuredJson(boolean structuredJson) {
+			this.structuredJson = structuredJson;
+			return this;
+		}
+
 		/**
 		 * The initial {@link SystemMessage} to instruct the language model about creating HQL queries,
 		 * and the structure of the domain metamodel (mapped classes and their structure).
@@ -112,7 +118,7 @@ public class HibernateAssistant {
 		 *
 		 * @return {{@code this}} for chaining calls
 		 */
-		public Builder metamodelPromptTemplate(String metamodelPromptTemplate) {
+		public Builder metamodelPromptTemplate(PromptTemplate metamodelPromptTemplate) {
 			this.metamodelPromptTemplate = metamodelPromptTemplate;
 			return this;
 		}
@@ -122,7 +128,8 @@ public class HibernateAssistant {
 					getOrDefault( chatModel, Builder::defaultChatLanguageModel ),
 					getOrDefault( chatMemory, Builder::defaultChatMemory ),
 					getOrDefault( metamodelPromptTemplate, METAMODEL_PROMPT_TEMPLATE ),
-					ensureNotNull( metamodel, "Metamodel" )
+					ensureNotNull( metamodel, "Metamodel" ),
+					structuredJson
 			);
 		}
 
@@ -166,15 +173,18 @@ public class HibernateAssistant {
 	private final SystemMessage metamodelPrompt;
 	private final ChatMemory chatMemory;
 	private final JpaMetamodel metamodel;
+	private final boolean structuredJson;
 
 	private HibernateAssistant(
 			ChatLanguageModel chatModel,
 			ChatMemory chatMemory,
-			String metamodelPromptTemplate,
-			Metamodel metamodel) {
+			PromptTemplate metamodelPromptTemplate,
+			Metamodel metamodel,
+			boolean structuredJson) {
 		this.chatModel = chatModel;
 		this.chatMemory = chatMemory;
 		this.metamodel = (JpaMetamodel) metamodel;
+		this.structuredJson = structuredJson;
 
 		this.metamodelPrompt = getMetamodelPrompt( metamodelPromptTemplate, metamodel );
 		log.infof( "Metamodel prompt: %s", metamodelPrompt.text() );
@@ -189,10 +199,8 @@ public class HibernateAssistant {
 //		service.chat( metamodelPrompt );
 	}
 
-	private static SystemMessage getMetamodelPrompt(String metamodelPromptTemplate, Metamodel metamodel) {
-		return PromptTemplate.from( metamodelPromptTemplate )
-				.apply( getDomainModelPrompt( metamodel ) )
-				.toSystemMessage();
+	private static SystemMessage getMetamodelPrompt(PromptTemplate metamodelPromptTemplate, Metamodel metamodel) {
+		return metamodelPromptTemplate.apply( getDomainModelPrompt( metamodel ) ).toSystemMessage();
 	}
 
 	/**
@@ -224,31 +232,52 @@ public class HibernateAssistant {
 
 //		final AiQuery aiQuery = service.chat( message );
 
-		final ChatRequest chatRequest = ChatRequest.builder()
-				.responseFormat( hqlResponseFormat() )
-				.messages( chatMemory.messages() )
-				.build();
+		final ChatRequest.Builder requestBuilder = ChatRequest.builder().messages( chatMemory.messages() );
+		if ( structuredJson ) {
+			requestBuilder.responseFormat( hqlResponseFormat() );
+		}
+
+		final ChatRequest chatRequest = requestBuilder.build();
 
 		final ChatResponse chatResponse = chatModel.chat( chatRequest );
-		final String response = chatResponse.aiMessage().text();
 
-		log.infof( "Raw model response: %s", response );
-
-		final HqlHolder hqlHolder;
-		try {
-			hqlHolder = new ObjectMapper().readValue( response, HqlHolder.class );
-		}
-		catch (JsonProcessingException e) {
-			throw new RuntimeException( e );
-		}
-
-//		final String HQL = extractHQL( response );
-
-		final String hql = hqlHolder.hqlQuery();
+		final String hql = extractHql( chatResponse, structuredJson );
 
 		log.infof( "Extracted HQL: %s", hql );
 
 		return AiQuery.from( hql, resultClass, session );
+	}
+
+	private static String extractHql(ChatResponse chatResponse, boolean structuredJson) {
+		final String response = chatResponse.aiMessage().text();
+
+		log.infof( "Raw model response: %s", response );
+
+		if ( structuredJson ) {
+			final HqlHolder hqlHolder;
+			try {
+				hqlHolder = new ObjectMapper().readValue( response, HqlHolder.class );
+			}
+			catch (JsonProcessingException e) {
+				throw new RuntimeException( e );
+			}
+
+			return hqlHolder.hqlQuery();
+		}
+		else {
+			return extractHql( response );
+		}
+	}
+
+	public static String extractHql(String response) {
+		// Try our best to extract valid HQL from text
+		final String regex = "(?i)\\bSELECT\\b.*?(?:;|\\n|$)";
+		final Pattern pattern = Pattern.compile( regex );
+		final Matcher matcher = pattern.matcher( response );
+		if ( matcher.find() ) {
+			return matcher.group().trim();
+		}
+		return null;
 	}
 
 	/**
@@ -410,18 +439,6 @@ public class HibernateAssistant {
 														   .addStringProperty( "hqlQuery" )
 														   .required( "hqlQuery" ) // see [2] below
 														   .build() ).build() ).build();
-	}
-
-	public static String extractHQL(String response) {
-		// sadly, we often get more than pure HQL in the chatbot's response
-		// here, we try our best to clean that up
-		final String regex = "(?i)\\bSELECT\\b.*?(?:;|\\n|$)";
-		final Pattern pattern = Pattern.compile( regex );
-		final Matcher matcher = pattern.matcher( response );
-		if ( matcher.find() ) {
-			return matcher.group().trim();
-		}
-		return null;
 	}
 
 	public static String getDomainModelPrompt(Metamodel metamodel) {
