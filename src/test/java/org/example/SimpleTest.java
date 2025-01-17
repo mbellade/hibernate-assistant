@@ -57,4 +57,22 @@ public class SimpleTest {
 			addresses.forEach( address -> System.out.println( "Street: " + address.getStreet() ) );
 		} );
 	}
+
+	@Test
+	public void testNaturalLanguageQuery(EntityManagerFactoryScope scope) {
+		scope.inTransaction( entityManager -> {
+			final Session session = entityManager.unwrap( Session.class );
+			// create new HibernateAssistant with default model and memory settings
+			final HibernateAssistant assistant = HibernateAssistant.builder()
+					.metamodel( session.getMetamodel() )
+					.build();
+
+			final String message = "How many companies do not have an address?";
+			final AiQuery<Company> aiQuery = assistant.createAiQuery( message, session, Company.class );
+
+			final String naturalLanguageResult = assistant.executeQuery( aiQuery, session );
+
+			System.out.println( "Result : " + naturalLanguageResult );
+		} );
+	}
 }

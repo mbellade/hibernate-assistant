@@ -1,12 +1,20 @@
 package org.example;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.hibernate.Internal;
 import org.hibernate.Session;
+import org.hibernate.engine.spi.SessionFactoryImplementor;
+import org.hibernate.internal.util.EntityPrinter;
 import org.hibernate.metamodel.model.domain.JpaMetamodel;
 import org.hibernate.metamodel.model.domain.ManagedDomainType;
+import org.hibernate.persister.entity.EntityPersister;
+import org.hibernate.query.spi.AbstractSelectionQuery;
+import org.hibernate.type.descriptor.java.JavaType;
 
 import org.jboss.logging.Logger;
 
@@ -53,7 +61,7 @@ import static dev.langchain4j.model.chat.request.ResponseFormatType.JSON;
 public class HibernateAssistant {
 	private static final Logger log = Logger.getLogger( HibernateAssistant.class );
 
-	private static final PromptTemplate METAMODEL_PROMPT_TEMPLATE = PromptTemplate.from(
+	private static final String METAMODEL_PROMPT_TEMPLATE =
 			"You are an expert in writing Hibernate Query Language (HQL) queries.\n"
 					+ "You have access to a entity model with the following structure:\n\n" +
 					"{{it}}" +
@@ -63,7 +71,77 @@ public class HibernateAssistant {
 //					"The query must never 'join fetch' attributes. " +
 //					"The query must not limit the number of results. " +
 //					"The query must not use patterns to match strings." +
-					"\nDo not output anything else aside from a valid HQL statement!" );
+					"\nDo not output anything else aside from a valid HQL statement!";
+
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static class Builder {
+		private Metamodel metamodel;
+		private ChatLanguageModel chatModel;
+		private ChatMemory chatMemory;
+		private String metamodelPromptTemplate;
+
+		private Builder() {
+		}
+
+		public Builder metamodel(Metamodel metamodel) {
+			this.metamodel = metamodel;
+			return this;
+		}
+
+		public Builder chatModel(ChatLanguageModel chatModel) {
+			this.chatModel = chatModel;
+			return this;
+		}
+
+		public Builder chatMemory(ChatMemory chatMemory) {
+			this.chatMemory = chatMemory;
+			return this;
+		}
+
+		/**
+		 * The initial {@link SystemMessage} to instruct the language model about creating HQL queries,
+		 * and the structure of the domain metamodel (mapped classes and their structure).
+		 * <p>
+		 * Must include {@code {{it}}} where the generated mapped objects information will be substituted.
+		 * Defaults to {@link #METAMODEL_PROMPT_TEMPLATE}.
+		 *
+		 * @param metamodelPromptTemplate the custom prompt template to be used
+		 *
+		 * @return {{@code this}} for chaining calls
+		 */
+		public Builder metamodelPromptTemplate(String metamodelPromptTemplate) {
+			this.metamodelPromptTemplate = metamodelPromptTemplate;
+			return this;
+		}
+
+		public HibernateAssistant build() {
+			return new HibernateAssistant(
+					getOrDefault( chatModel, Builder::defaultChatLanguageModel ),
+					getOrDefault( chatMemory, Builder::defaultChatMemory ),
+					getOrDefault( metamodelPromptTemplate, METAMODEL_PROMPT_TEMPLATE ),
+					ensureNotNull( metamodel, "Metamodel" )
+			);
+		}
+
+		private static ChatLanguageModel defaultChatLanguageModel() {
+			return OllamaChatModel.builder()
+					.baseUrl( OLLAMA_BASE_URL )
+					.modelName( CODELLAMA )
+					.supportedCapabilities( RESPONSE_FORMAT_JSON_SCHEMA )
+					.temperature( 0.0 )
+//					.logRequests( true )
+//					.logResponses( true )
+					.build();
+		}
+
+		private static ChatMemory defaultChatMemory() {
+			// this can be tweaked, but really should be user-provided
+			return MessageWindowChatMemory.withMaxMessages( 10 );
+		}
+	}
 
 	public static final String OLLAMA_BASE_URL = "http://localhost:11434";
 	public static final String GRANITE_31_8b = "granite3.1-dense:8b";
@@ -89,12 +167,16 @@ public class HibernateAssistant {
 	private final ChatMemory chatMemory;
 	private final JpaMetamodel metamodel;
 
-	private HibernateAssistant(ChatLanguageModel chatModel, ChatMemory chatMemory, Metamodel metamodel) {
+	private HibernateAssistant(
+			ChatLanguageModel chatModel,
+			ChatMemory chatMemory,
+			String metamodelPromptTemplate,
+			Metamodel metamodel) {
 		this.chatModel = chatModel;
 		this.chatMemory = chatMemory;
 		this.metamodel = (JpaMetamodel) metamodel;
 
-		this.metamodelPrompt = getMetamodelPrompt( metamodel );
+		this.metamodelPrompt = getMetamodelPrompt( metamodelPromptTemplate, metamodel );
 		log.infof( "Metamodel prompt: %s", metamodelPrompt.text() );
 		chatMemory.add( metamodelPrompt );
 
@@ -107,10 +189,17 @@ public class HibernateAssistant {
 //		service.chat( metamodelPrompt );
 	}
 
-	private static SystemMessage getMetamodelPrompt(Metamodel metamodel) {
-		return METAMODEL_PROMPT_TEMPLATE.apply( getDomainModelPrompt( metamodel ) ).toSystemMessage();
+	private static SystemMessage getMetamodelPrompt(String metamodelPromptTemplate, Metamodel metamodel) {
+		return PromptTemplate.from( metamodelPromptTemplate )
+				.apply( getDomainModelPrompt( metamodel ) )
+				.toSystemMessage();
 	}
 
+	/**
+	 * Reset the assistant's {@link ChatMemory} to return to a clean state. This should be done each
+	 * time you create a new {@link AiQuery}, unless you're relying on the context of previous
+	 * requests to formulate your current question.
+	 */
 	public void clearMemory() {
 		this.chatMemory.clear();
 		this.chatMemory.add( metamodelPrompt );
@@ -162,15 +251,149 @@ public class HibernateAssistant {
 		return AiQuery.from( hql, resultClass, session );
 	}
 
-	private static <T> ManagedType<T> findManagedType(Class<T> type, Metamodel metamodel) {
-		// todo : we can possibly remove dependence on Hibernate and just use JPA apis
-		try {
-			return metamodel.managedType( type );
+	/**
+	 * Executes the given {@link AiQuery} as a {@link org.hibernate.query.SelectionQuery}, and provides
+	 * a natural language response by giving the results back to the {@link ChatLanguageModel}.
+	 * <p>
+	 * Note that this requires the assistant's {@link ChatMemory} to be able to store at least 3 messages:
+	 * the base mapping model system message, the initial request to create the query and the String
+	 * representation of the query results.
+	 * <p>
+	 * If you wish to execute the query directly and obtain the results yourself, you should use
+	 * {@link AiQuery#createSelectionQuery()} or {@link AiQuery#getResultList()}.
+	 *
+	 * @param query the AI query to execute
+	 * @param session the session in which to execute the query
+	 *
+	 * @return a natural language response based on the results of the query
+	 */
+	public String executeQuery(AiQuery<?> query, Session session) {
+		final String result = executeQueryToString( query, session );
+
+
+		final String prompt = "The query returned the following data:\n" + result +
+				// this seems to be needed, otherwise with some models we just get an HQL query
+				"\nAnswer the original question using natural language and do not create a query!";
+
+		log.infof( "Query result prompt: %s", prompt );
+
+		final UserMessage userMessage = UserMessage.from( prompt );
+		chatMemory.add( userMessage );
+
+		final ChatRequest chatRequest = ChatRequest.builder()
+				.messages( chatMemory.messages() )
+				.build();
+
+		final ChatResponse chatResponse = chatModel.chat( chatRequest );
+		return chatResponse.aiMessage().text();
+	}
+
+	/**
+	 * Executes the given {@link AiQuery} as a {@link org.hibernate.query.SelectionQuery}, and provides
+	 * a string representation of the response. The string will be created based on Hibernate's
+	 * knowledge of the domain model, but it will not print the entire object tree since that
+	 * would cause circularity problems. This is a best-effort attempt at providing a useful
+	 * string-representation based on data, mainly used to pass it back to a {@link ChatLanguageModel}
+	 * like in {@link #executeQuery(AiQuery, Session)}.
+	 * <p>
+	 * If you wish to execute the query directly and obtain the results yourself, you should use
+	 * {@link AiQuery#createSelectionQuery()} or {@link AiQuery#getResultList()}.
+	 *
+	 * @param query the AI query to execute
+	 * @param session the session in which to execute the query
+	 *
+	 * @return a natural language response based on the results of the query
+	 */
+	public String executeQueryToString(AiQuery<?> query, Session session) {
+		final AbstractSelectionQuery<?> selectionQuery = (AbstractSelectionQuery<?>) query.createSelectionQuery();
+
+		final List<?> resultList = selectionQuery.getResultList();
+		if ( resultList.isEmpty() ) {
+			return "The query did not return any results.";
 		}
-		catch (Exception e) {
-			// ignore the exception and return null
-			return null;
+
+		final List<String> resultRows = new ArrayList<>();
+
+		// header
+		final Class<?> resultType = selectionQuery.getResultType();
+//		if ( resultType != null && resultType != Object.class ) {
+//			resultRows.add( "The query returned objects of type: \"" + resultType.getTypeName() + "\"." );
+//		}
+//		else {
+//			resultRows.add( "The query returned the following objects." );
+//		}
+
+//		final ManagedDomainType<?> managedType = sessionFactory.getJpaMetamodel().findManagedType( resultType );
+//		if ( managedType != null ) {
+//			resultRows.add( String.join(
+//					",",
+//					managedType.getAttributes().stream().map( Attribute::getName ).toList()
+//			) );
+//		}
+
+		// contents
+		resultList.forEach( result -> resultRows.add( serializeToString(
+				result,
+				resultType,
+				(SessionFactoryImplementor) session.getSessionFactory()
+		) ) );
+
+
+		return String.join( "\n", resultRows );
+	}
+
+	/**
+	 * Tries to get a meaningful String representation of the result of an HQL query.
+	 * We use {@link EntityPrinter} for entities, this allows us to handle associations
+	 * cleanly, but it doesn't print the whole object tree - that would pose a problem
+	 * of circularity, so we'd have to explore options to handle that.
+	 */
+	private static String serializeToString(Object result, Class<?> resultType, SessionFactoryImplementor sf) {
+		if ( result == null ) {
+			return "<null>";
 		}
+
+		if ( resultType != null && resultType != Object.class ) {
+			if ( resultType.isArray() ) {
+				Object[] array = (Object[]) result;
+				List<String> results = new ArrayList<>( array.length );
+				for ( Object r : array ) {
+					results.add( serializeToString( r, r == null ? null : r.getClass(), sf ) );
+				}
+				return "[" + String.join( ",", results ) + "]";
+			}
+			else {
+				final EntityPersister entityDescriptor = sf.getMappingMetamodel().findEntityDescriptor(
+						resultType
+				);
+				if ( entityDescriptor != null ) {
+					return new EntityPrinter( sf ).toString( entityDescriptor.getEntityName(), result );
+				}
+				else {
+					// try to resolve based on Hibernate's knowledge of the type
+					final JavaType<Object> descriptor = sf.getTypeConfiguration()
+							.getJavaTypeRegistry()
+							.getDescriptor( resultType );
+					if ( descriptor != null ) {
+						// todo special handling for embeddables (we'd need the navigable role) ?
+						// todo special handling for mapped-superclasses ?
+						return descriptor.toString( result );
+					}
+				}
+			}
+		}
+
+		// As a last stand, just rely on the object's toString() method
+		return result.toString();
+	}
+
+	public <T> ManagedType<T> findManagedType(Class<T> type) {
+		return metamodel.findManagedType( type );
+	}
+
+	@Internal
+	public JpaMetamodel getMetamodel() {
+		return metamodel;
 	}
 
 	record HqlHolder(String hqlQuery) {
@@ -277,58 +500,5 @@ public class HibernateAssistant {
 			sb.append( "\"\n" );
 		}
 		return sb.toString();
-	}
-
-
-	public static Builder builder() {
-		return new Builder();
-	}
-
-	public static class Builder {
-		private Metamodel metamodel;
-		private ChatLanguageModel chatModel;
-		private ChatMemory chatMemory;
-
-		private Builder() {
-		}
-
-		public Builder metamodel(Metamodel metamodel) {
-			this.metamodel = metamodel;
-			return this;
-		}
-
-		public Builder chatModel(ChatLanguageModel chatModel) {
-			this.chatModel = chatModel;
-			return this;
-		}
-
-		public Builder chatMemory(ChatMemory chatMemory) {
-			this.chatMemory = chatMemory;
-			return this;
-		}
-
-		public HibernateAssistant build() {
-			return new HibernateAssistant(
-					getOrDefault( chatModel, Builder::defaultChatLanguageModel ),
-					getOrDefault( chatMemory, Builder::defaultChatMemory ),
-					ensureNotNull( metamodel, "Metamodel" )
-			);
-		}
-
-		private static ChatLanguageModel defaultChatLanguageModel() {
-			return OllamaChatModel.builder()
-					.baseUrl( OLLAMA_BASE_URL )
-					.modelName( CODELLAMA )
-					.supportedCapabilities( RESPONSE_FORMAT_JSON_SCHEMA )
-					.temperature( 0.0 )
-//					.logRequests( true )
-//					.logResponses( true )
-					.build();
-		}
-
-		private static ChatMemory defaultChatMemory() {
-			// Just enough for 1 system message and 1 user message
-			return MessageWindowChatMemory.withMaxMessages( 2 );
-		}
 	}
 }
