@@ -49,6 +49,25 @@ public class SimpleTest {
 	}
 
 	@Test
+	public void testQueryWithHQL(SessionFactoryScope scope) {
+		scope.inTransaction( session -> {
+			// create new HibernateAssistant with default model and memory settings
+			final HibernateAssistant assistant = HibernateAssistant.builder()
+					.metamodel( session.getMetamodel() )
+					.build();
+
+			final String message = "Extract the address from companies. The address must have a street starting with 'Via'.";
+			final AiQuery<Address> aiQuery = assistant.createAiQuery( message, session, Address.class );
+
+
+			final List<Address> addresses = session.createQuery( aiQuery.getHql(), Address.class ).getResultList();
+
+			System.out.println( "Addresses : " + addresses.size() );
+			addresses.forEach( address -> System.out.println( "Street: " + address.getStreet() ) );
+		} );
+	}
+
+	@Test
 	public void testNaturalLanguageFromQuery(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
 			// create new HibernateAssistant with default model and memory settings
