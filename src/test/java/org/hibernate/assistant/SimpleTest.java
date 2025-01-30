@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.hibernate.assistant.domain.Address;
 import org.hibernate.assistant.domain.Company;
+import org.hibernate.assistant.domain.Employee;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 
 import org.hibernate.testing.orm.junit.DomainModel;
@@ -16,7 +17,7 @@ import org.junit.jupiter.api.Test;
 import static org.hibernate.assistant.util.LanguageModels.testAssistant;
 
 @SessionFactory
-@DomainModel(annotatedClasses = { Company.class, Address.class })
+@DomainModel(annotatedClasses = { Company.class, Address.class, Employee.class })
 public class SimpleTest {
 	@Test
 	public void testCompanyQuery(SessionFactoryScope scope) {
@@ -60,6 +61,25 @@ public class SimpleTest {
 
 			System.out.println( "Addresses : " + addresses.size() );
 			addresses.forEach( address -> System.out.println( "Street: " + address.getStreet() ) );
+		} );
+	}
+
+	@Test
+	public void testEmployeeQueries(SessionFactoryScope scope) {
+		scope.inTransaction( session -> {
+			final HibernateAssistant assistant = testAssistant( session.getMetamodel() );
+
+			String message = "Extract all companies which have at least 2 employees whose first name starts with 'M'";
+			final List<Company> companies = assistant.createAiQuery( message, session, Company.class ).getResultList();
+
+			System.out.println( "Companies : " + companies.size() );
+			companies.forEach( company -> System.out.println( "Name: " + company.getName() ) );
+
+			message = "Extract all employees of companies in the city of 'Raleigh' whose salary is at least 100000.";
+			final List<Employee> employees = assistant.createAiQuery( message, session, Employee.class ).getResultList();
+
+			System.out.println( "Employees : " + employees.size() );
+			employees.forEach( employee -> System.out.println( "First name: " + employee.getFirstName() ) );
 		} );
 	}
 

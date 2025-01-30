@@ -5,11 +5,14 @@
 package org.hibernate.assistant.domain;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
 
 @Entity
 public class Company implements Serializable {
@@ -22,6 +25,9 @@ public class Company implements Serializable {
 	@Embedded
 	private Address address;
 
+	@OneToMany(mappedBy="company")
+	private List<Employee> employees;
+
 	public Company() {
 	}
 
@@ -29,6 +35,7 @@ public class Company implements Serializable {
 		this.id = id;
 		this.name = name;
 		this.address = address;
+		this.employees = new ArrayList<>();
 	}
 
 	public long getId() {
