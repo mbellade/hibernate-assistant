@@ -34,7 +34,6 @@ import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.request.json.JsonSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.input.PromptTemplate;
-import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.rag.content.injector.DefaultContentInjector;
@@ -52,7 +51,6 @@ import jakarta.persistence.metamodel.Type;
 
 import static dev.langchain4j.internal.Utils.getOrDefault;
 import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
-import static dev.langchain4j.model.chat.Capability.RESPONSE_FORMAT_JSON_SCHEMA;
 import static dev.langchain4j.model.chat.request.ResponseFormatType.JSON;
 import static org.hibernate.assistant.rag.HibernateContentRetriever.INJECTOR_PROMPT_TEMPLATE;
 
@@ -134,31 +132,11 @@ public class HibernateAssistant {
 			return new HibernateAssistant( this );
 		}
 
-		private static ChatLanguageModel defaultChatLanguageModel() {
-			return OllamaChatModel.builder()
-					.baseUrl( OLLAMA_BASE_URL )
-					.modelName( CODELLAMA )
-					.supportedCapabilities( RESPONSE_FORMAT_JSON_SCHEMA )
-					.temperature( 0.0 )
-//					.logRequests( true )
-//					.logResponses( true )
-					.build();
-		}
-
 		private static ChatMemory defaultChatMemory() {
 			// this can be tweaked, but really should be user-provided
 			return MessageWindowChatMemory.withMaxMessages( 10 );
 		}
 	}
-
-	public static final String OLLAMA_BASE_URL = "http://localhost:11434";
-	public static final String GRANITE_31_8b = "granite3.1-dense:8b";
-	public static final String GRANITE_CODE_20b = "granite-code:20b-instruct";
-	public static final String GRANITE_CODE_8b = "granite-code:8b-instruct-128k-q4_1"; // used by recommended RH code assistant
-	public static final String GRANITE_CODE_3b = "granite-code:3b";
-	public static final String LLAMA_32 = "llama3.2:latest";
-	public static final String CODELLAMA = "codellama:latest";
-	public static final String CODELLAMA_13B_INSTRUCT = "codellama:13b-instruct";
 
 	// todo : construct a natural-language response with the data obtained from HQL
 	// todo : "AI-query" object holding the HQL, with the possibility of accessing it instead of executing
@@ -176,27 +154,7 @@ public class HibernateAssistant {
 	private final JpaMetamodel metamodel;
 	private final boolean structuredJson;
 
-	public HibernateAssistant(ChatLanguageModel chatModel, ChatMemory chatMemory, Metamodel metamodel) {
-		this( chatModel, chatMemory, metamodel, METAMODEL_PROMPT_TEMPLATE, true );
-	}
-
-	public HibernateAssistant(
-			ChatLanguageModel chatModel,
-			ChatMemory chatMemory,
-			Metamodel metamodel,
-			PromptTemplate metamodelPromptTemplate) {
-		this( chatModel, chatMemory, metamodel, metamodelPromptTemplate, true );
-	}
-
-	public HibernateAssistant(
-			ChatLanguageModel chatModel,
-			ChatMemory chatMemory,
-			Metamodel metamodel,
-			boolean structuredJson) {
-		this( chatModel, chatMemory, metamodel, METAMODEL_PROMPT_TEMPLATE, structuredJson );
-	}
-
-	public HibernateAssistant(
+	private HibernateAssistant(
 			ChatLanguageModel chatModel,
 			ChatMemory chatMemory,
 			Metamodel metamodel,
@@ -222,7 +180,7 @@ public class HibernateAssistant {
 
 	private HibernateAssistant(Builder builder) {
 		this(
-				getOrDefault( builder.chatModel, Builder::defaultChatLanguageModel ),
+				ensureNotNull( builder.chatModel, "ChatLanguageModel" ),
 				getOrDefault( builder.chatMemory, Builder::defaultChatMemory ),
 				ensureNotNull( builder.metamodel, "Metamodel" ),
 				getOrDefault( builder.metamodelPromptTemplate, METAMODEL_PROMPT_TEMPLATE ),

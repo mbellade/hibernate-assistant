@@ -13,6 +13,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import static org.hibernate.assistant.util.LanguageModels.testAssistant;
+
 @SessionFactory
 @DomainModel(annotatedClasses = { Company.class, Address.class })
 public class SimpleTest {
@@ -20,9 +22,7 @@ public class SimpleTest {
 	public void testCompanyQuery(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
 			// create new HibernateAssistant with default model and memory settings
-			final HibernateAssistant assistant = HibernateAssistant.builder()
-					.metamodel( session.getMetamodel() )
-					.build();
+			final HibernateAssistant assistant = testAssistant( session.getMetamodel() );
 
 			final String message = "Extract all companies with a name starting with any upper case vowel letter.";
 			final List<Company> companies = assistant.createAiQuery( message, session, Company.class ).getResultList();
@@ -36,9 +36,7 @@ public class SimpleTest {
 	public void testAddressQuery(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
 			// create new HibernateAssistant with default model and memory settings
-			final HibernateAssistant assistant = HibernateAssistant.builder()
-					.metamodel( session.getMetamodel() )
-					.build();
+			final HibernateAssistant assistant = testAssistant( session.getMetamodel() );
 
 			final String message = "Extract the address from companies. The address must have a street starting with 'Via'.";
 			final List<Address> addresses = assistant.createAiQuery( message, session, Address.class ).getResultList();
@@ -52,9 +50,7 @@ public class SimpleTest {
 	public void testQueryWithHQL(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
 			// create new HibernateAssistant with default model and memory settings
-			final HibernateAssistant assistant = HibernateAssistant.builder()
-					.metamodel( session.getMetamodel() )
-					.build();
+			final HibernateAssistant assistant = testAssistant( session.getMetamodel() );
 
 			final String message = "Extract the address from companies. The address must have a street starting with 'Via'.";
 			final AiQuery<Address> aiQuery = assistant.createAiQuery( message, session, Address.class );
@@ -71,9 +67,7 @@ public class SimpleTest {
 	public void testNaturalLanguageFromQuery(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
 			// create new HibernateAssistant with default model and memory settings
-			final HibernateAssistant assistant = HibernateAssistant.builder()
-					.metamodel( session.getMetamodel() )
-					.build();
+			final HibernateAssistant assistant = testAssistant( session.getMetamodel() );
 
 			final String message = "How many companies do not have an address?";
 			final AiQuery<Company> aiQuery = assistant.createAiQuery( message, session, Company.class );
@@ -88,9 +82,7 @@ public class SimpleTest {
 	public void testNaturalLanguageFromMessage(SessionFactoryScope scope) {
 		final SessionFactoryImplementor sessionFactory = scope.getSessionFactory();
 		// create new HibernateAssistant with default model and memory settings
-		final HibernateAssistant assistant = HibernateAssistant.builder()
-				.metamodel( sessionFactory.getJpaMetamodel() )
-				.build();
+		final HibernateAssistant assistant = testAssistant( sessionFactory.getJpaMetamodel() );
 
 		final String message = "How many addresses start with the word 'Via'?";
 		final String naturalLanguageResult = assistant.executeQuery( message, sessionFactory );

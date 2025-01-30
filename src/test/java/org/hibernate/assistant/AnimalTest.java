@@ -16,6 +16,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import static org.hibernate.assistant.util.LanguageModels.testAssistant;
+
 @SessionFactory
 @DomainModel(standardModels = StandardDomainModel.ANIMAL)
 public class AnimalTest {
@@ -23,9 +25,7 @@ public class AnimalTest {
 	public void testHumanQuery(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
 			// create new HibernateAssistant with default model and memory settings
-			final HibernateAssistant assistant = HibernateAssistant.builder()
-					.metamodel( session.getMetamodel() )
-					.build();
+			final HibernateAssistant assistant = testAssistant( session.getMetamodel() );
 
 			final String message = "Extract all humans that have at least two or more friends.";
 			final List<Human> humans = assistant.createAiQuery( message, session, Human.class ).getResultList();
@@ -40,9 +40,7 @@ public class AnimalTest {
 	public void testSubsequentQueries(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
 			// create new HibernateAssistant with default model and memory settings
-			final HibernateAssistant assistant = HibernateAssistant.builder()
-					.metamodel( session.getMetamodel() )
-					.build();
+			final HibernateAssistant assistant = testAssistant( session.getMetamodel() );
 
 			String message = "Return all domestic animals that do not have an owner.";
 			final List<DomesticAnimal> unowned = assistant.createAiQuery( message, session, DomesticAnimal.class )

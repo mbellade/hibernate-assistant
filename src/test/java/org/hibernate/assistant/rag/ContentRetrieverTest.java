@@ -13,33 +13,24 @@ import org.junit.jupiter.api.Test;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.rag.content.injector.DefaultContentInjector;
 import dev.langchain4j.service.AiServices;
 
-import static dev.langchain4j.model.chat.Capability.RESPONSE_FORMAT_JSON_SCHEMA;
-import static org.hibernate.assistant.HibernateAssistant.CODELLAMA;
-import static org.hibernate.assistant.HibernateAssistant.OLLAMA_BASE_URL;
 import static org.hibernate.assistant.rag.HibernateContentRetriever.INJECTOR_PROMPT_TEMPLATE;
+import static org.hibernate.assistant.util.LanguageModels.testChatLanguageModel;
 
 @SessionFactory
 @DomainModel(annotatedClasses = { Company.class, Address.class })
 public class ContentRetrieverTest {
-	private final ChatLanguageModel chatModel = OllamaChatModel.builder()
-			.baseUrl( OLLAMA_BASE_URL )
-			.modelName( CODELLAMA )
-			.supportedCapabilities( RESPONSE_FORMAT_JSON_SCHEMA )
-			.temperature( 0.0 )
-			.build();
-
+	private final ChatLanguageModel chatModel = testChatLanguageModel();
 	private final ChatMemory chatMemory = MessageWindowChatMemory.withMaxMessages( 10 );
 
 	@Test
 	public void simpleRagTest(SessionFactoryScope scope) {
 		final HibernateContentRetriever contentRetriever = HibernateContentRetriever.builder()
-				.chatModel( chatModel )
+				.chatModel( testChatLanguageModel() )
 				.chatMemory( chatMemory )
 				.sessionFactory( scope.getSessionFactory() )
 				.build();
