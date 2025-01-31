@@ -2,6 +2,7 @@ package org.hibernate.assistant.rag;
 
 import org.hibernate.assistant.domain.Address;
 import org.hibernate.assistant.domain.Company;
+import org.hibernate.assistant.lc4j.HibernateContentRetriever;
 
 import org.hibernate.testing.orm.junit.DomainModel;
 import org.hibernate.testing.orm.junit.SessionFactory;
@@ -18,7 +19,7 @@ import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.rag.content.injector.DefaultContentInjector;
 import dev.langchain4j.service.AiServices;
 
-import static org.hibernate.assistant.rag.HibernateContentRetriever.INJECTOR_PROMPT_TEMPLATE;
+import static org.hibernate.assistant.lc4j.HibernateContentRetriever.INJECTOR_PROMPT_TEMPLATE;
 import static org.hibernate.assistant.util.LanguageModels.testChatLanguageModel;
 
 @SessionFactory

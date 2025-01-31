@@ -3,6 +3,7 @@ package org.hibernate.assistant.util;
 import java.util.Locale;
 
 import org.hibernate.assistant.HibernateAssistant;
+import org.hibernate.assistant.lc4j.HibernateAssistantLC4J;
 
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -70,7 +71,7 @@ public class LanguageModels {
 	}
 
 	public static HibernateAssistant testAssistant(Metamodel metamodel, ChatMemory memory) {
-		return HibernateAssistant.builder()
+		return HibernateAssistantLC4J.builder()
 				.chatModel( testChatLanguageModel() )
 				.metamodel( metamodel )
 				.chatMemory( memory )

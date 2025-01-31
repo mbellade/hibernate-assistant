@@ -1,4 +1,4 @@
-package org.hibernate.assistant.rag;
+package org.hibernate.assistant.lc4j;
 
 import java.util.List;
 
@@ -68,10 +68,10 @@ public class HibernateContentRetriever implements ContentRetriever {
 		}
 	}
 
-	private final HibernateAssistant assistant;
+	private final HibernateAssistantLC4J assistant;
 	private final SessionFactoryImplementor sessionFactory;
 
-	public HibernateContentRetriever(HibernateAssistant assistant, SessionFactory sessionFactory) {
+	public HibernateContentRetriever(HibernateAssistantLC4J assistant, SessionFactory sessionFactory) {
 		this.assistant = ensureNotNull( assistant, "Metamodel" );
 		this.sessionFactory = (SessionFactoryImplementor) ensureNotNull( sessionFactory, "Session Factory" );
 	}
@@ -81,7 +81,7 @@ public class HibernateContentRetriever implements ContentRetriever {
 			ChatMemory chatMemory,
 			SessionFactory sessionFactory) {
 		this(
-				HibernateAssistant.builder()
+				HibernateAssistantLC4J.builder()
 						.chatModel( chatModel )
 						.chatMemory( chatMemory )
 						.metamodel( sessionFactory.getMetamodel() )
@@ -96,7 +96,7 @@ public class HibernateContentRetriever implements ContentRetriever {
 			PromptTemplate metamodelPromptTemplate,
 			SessionFactory sessionFactory) {
 		this(
-				HibernateAssistant.builder()
+				HibernateAssistantLC4J.builder()
 						.chatModel( chatModel )
 						.chatMemory( chatMemory )
 						.metamodel( sessionFactory.getMetamodel() )
@@ -112,14 +112,14 @@ public class HibernateContentRetriever implements ContentRetriever {
 
 	@Override
 	public List<Content> retrieve(Query naturalLanguageQuery) {
-		// todo we could implement retries, and pass the error message to the chat model
+		// todo : we could implement retries, and pass the error message to the chat model
 //		String errorMessage = null;
 //		int attemptsLeft = maxRetries + 1;
 //		while (attemptsLeft > 0) {
 //			attemptsLeft--;
 
 		final String result = sessionFactory.fromSession( session -> {
-			final AiQuery<Object> aiQuery = assistant.createAiQuery( naturalLanguageQuery.text(), session );
+			final AiQuery<?> aiQuery = assistant.createAiQuery( naturalLanguageQuery.text(), session );
 
 			try {
 				return assistant.executeQueryToString( aiQuery, session );
