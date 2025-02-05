@@ -126,6 +126,9 @@ public class AssistantUtils {
 						resultType
 				);
 				if ( entityDescriptor != null ) {
+					// todo : this is not enough, we need to serialize trees including their associations accounting for:
+					//  - lazy associations (to-one, to-many)
+					//  - circular dependencies (avoid infinite recursion)
 					return new EntityPrinter( sf ).toString( entityDescriptor.getEntityName(), result );
 				}
 				else {
@@ -134,8 +137,8 @@ public class AssistantUtils {
 							.getJavaTypeRegistry()
 							.getDescriptor( resultType );
 					if ( descriptor != null ) {
-						// todo special handling for embeddables (we'd need the navigable role) ?
-						// todo special handling for mapped-superclasses ?
+						// todo : we need special handling for embeddables, to render each value
+						// todo: we could also have special handling for mapped-superclass typed results
 						return descriptor.toString( result );
 					}
 				}

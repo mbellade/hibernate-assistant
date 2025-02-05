@@ -112,7 +112,8 @@ public class HibernateContentRetriever implements ContentRetriever {
 
 	@Override
 	public List<Content> retrieve(Query naturalLanguageQuery) {
-		// todo : we could implement retries, and pass the error message to the chat model
+		// todo : we could implement configurable retries, and pass the error message to the chat model
+		//  something like the following:
 //		String errorMessage = null;
 //		int attemptsLeft = maxRetries + 1;
 //		while (attemptsLeft > 0) {
