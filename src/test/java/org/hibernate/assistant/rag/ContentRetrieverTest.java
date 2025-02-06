@@ -2,6 +2,7 @@ package org.hibernate.assistant.rag;
 
 import org.hibernate.assistant.domain.Address;
 import org.hibernate.assistant.domain.Company;
+import org.hibernate.assistant.domain.Employee;
 import org.hibernate.assistant.lc4j.HibernateContentRetriever;
 
 import org.hibernate.testing.orm.junit.DomainModel;
@@ -23,7 +24,7 @@ import static org.hibernate.assistant.lc4j.HibernateContentRetriever.INJECTOR_PR
 import static org.hibernate.assistant.util.LanguageModels.testChatLanguageModel;
 
 @SessionFactory
-@DomainModel(annotatedClasses = { Company.class, Address.class })
+@DomainModel(annotatedClasses = { Company.class, Address.class, Employee.class })
 public class ContentRetrieverTest {
 	private final ChatLanguageModel chatModel = testChatLanguageModel();
 	private final ChatMemory chatMemory = MessageWindowChatMemory.withMaxMessages( 10 );
@@ -46,7 +47,7 @@ public class ContentRetrieverTest {
 				.retrievalAugmentor( rag )
 				.build();
 
-		final String response = assistant.chat( "How many addresses start with the word 'Via'?" );
+		final String response = assistant.chat( "How many company addresses have a street name that starts with the word 'Via'?" );
 
 		// There are 2 addresses that start with the word "Via".
 		System.out.println( "Response: " + response );

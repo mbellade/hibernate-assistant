@@ -12,6 +12,8 @@ import org.hibernate.assistant.HibernateAssistant;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.metamodel.model.domain.JpaMetamodel;
 import org.hibernate.metamodel.model.domain.ManagedDomainType;
+import org.hibernate.metamodel.model.domain.NavigableRole;
+import org.hibernate.query.sqm.tree.domain.SqmPath;
 
 import org.jboss.logging.Logger;
 
@@ -327,16 +329,11 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 		}
 
 		final List<String> resultRows = new ArrayList<>();
-		// This is the result type determined from the HQL interpretation
-		final Class<?> resultType = query.getResultType();
-
-		// contents
 		resultList.forEach( result -> resultRows.add( serializeToString(
 				result,
-				resultType,
+				query,
 				(SessionFactoryImplementor) session.getSessionFactory()
 		) ) );
-
 
 		return String.join( "\n", resultRows );
 	}

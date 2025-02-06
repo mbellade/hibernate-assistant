@@ -104,7 +104,7 @@ public class SimpleTest {
 		// create new HibernateAssistant with default model and memory settings
 		final HibernateAssistant assistant = testAssistant( sessionFactory.getJpaMetamodel() );
 
-		final String message = "How many addresses start with the word 'Via'?";
+		final String message = "How many company addresses have a street name that starts with the word 'Via'?";
 		final String naturalLanguageResult = assistant.executeQuery( message, sessionFactory );
 
 		// There is one company that does not have an address.

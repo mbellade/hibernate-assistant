@@ -4,10 +4,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import org.hibernate.assistant.AiQuery;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
-import org.hibernate.internal.util.EntityPrinter;
+import org.hibernate.metamodel.model.domain.EmbeddableDomainType;
+import org.hibernate.metamodel.model.domain.EntityDomainType;
 import org.hibernate.metamodel.model.domain.ManagedDomainType;
+import org.hibernate.metamodel.model.domain.spi.JpaMetamodelImplementor;
 import org.hibernate.persister.entity.EntityPersister;
+import org.hibernate.query.sqm.tree.domain.SqmPath;
+import org.hibernate.query.sqm.tree.from.SqmRoot;
+import org.hibernate.query.sqm.tree.select.SqmSelectStatement;
+import org.hibernate.query.sqm.tree.select.SqmSelectableNode;
+import org.hibernate.query.sqm.tree.select.SqmSelection;
+import org.hibernate.type.ComponentType;
 import org.hibernate.type.descriptor.java.JavaType;
 
 import jakarta.persistence.metamodel.Attribute;
@@ -103,49 +112,13 @@ public class AssistantUtils {
 
 	/**
 	 * Tries to get a meaningful String representation of the result of an HQL query.
-	 * We use {@link EntityPrinter} for entities, this allows us to handle associations
+	 * We use {@link HibernateSerializer} for entities, this allows us to handle associations
 	 * cleanly, but it doesn't print the whole object tree - that would pose a problem
 	 * of circularity, so we'll have to explore options to handle that.
 	 */
-	public static String serializeToString(Object result, Class<?> resultType, SessionFactoryImplementor sf) {
-		if ( result == null ) {
-			return "<null>";
-		}
-
-		if ( resultType != null && resultType != Object.class ) {
-			if ( resultType.isArray() ) {
-				Object[] array = (Object[]) result;
-				List<String> results = new ArrayList<>( array.length );
-				for ( Object r : array ) {
-					results.add( serializeToString( r, r == null ? null : r.getClass(), sf ) );
-				}
-				return "[" + String.join( ",", results ) + "]";
-			}
-			else {
-				final EntityPersister entityDescriptor = sf.getMappingMetamodel().findEntityDescriptor(
-						resultType
-				);
-				if ( entityDescriptor != null ) {
-					// todo : this is not enough, we need to serialize trees including their associations accounting for:
-					//  - lazy associations (to-one, to-many)
-					//  - circular dependencies (avoid infinite recursion)
-					return new EntityPrinter( sf ).toString( entityDescriptor.getEntityName(), result );
-				}
-				else {
-					// try to resolve based on Hibernate's knowledge of the type
-					final JavaType<Object> descriptor = sf.getTypeConfiguration()
-							.getJavaTypeRegistry()
-							.getDescriptor( resultType );
-					if ( descriptor != null ) {
-						// todo : we need special handling for embeddables, to render each value
-						// todo: we could also have special handling for mapped-superclass typed results
-						return descriptor.toString( result );
-					}
-				}
-			}
-		}
-
-		// As a last stand, just rely on the object's toString() method
-		return result.toString();
+	public static String serializeToString(Object result, AiQuery<?> query, SessionFactoryImplementor factory) {
+		// This is the result type determined from the HQL interpretation
+		final Class<?> resultType = query.getResultType();
+		return new HibernateSerializer( factory ).serializeToString( result, query, resultType );
 	}
 }

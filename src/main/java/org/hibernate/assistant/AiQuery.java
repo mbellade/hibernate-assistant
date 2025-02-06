@@ -27,6 +27,8 @@ import org.hibernate.query.Page;
 import org.hibernate.query.QueryParameter;
 import org.hibernate.query.SelectionQuery;
 import org.hibernate.query.spi.AbstractSelectionQuery;
+import org.hibernate.query.sqm.SqmSelectionQuery;
+import org.hibernate.query.sqm.tree.select.SqmSelectStatement;
 
 import jakarta.persistence.CacheRetrieveMode;
 import jakarta.persistence.CacheStoreMode;
@@ -36,14 +38,14 @@ import jakarta.persistence.LockModeType;
 import jakarta.persistence.Parameter;
 import jakarta.persistence.TemporalType;
 
-public class AiQuery<T> implements SelectionQuery<T> {
+public class AiQuery<R> implements SelectionQuery<R> {
 	private final String hql;
-	private final Class<T> resultClass;
+	private final Class<R> resultClass;
 	private final Session session;
 
-	private transient SelectionQuery<T> selectionQuery;
+	private transient SelectionQuery<R> selectionQuery;
 
-	private AiQuery(String hql, Class<T> resultClass, Session session) {
+	private AiQuery(String hql, Class<R> resultClass, Session session) {
 		this.hql = hql;
 		this.resultClass = resultClass;
 		this.session = session;
@@ -53,7 +55,7 @@ public class AiQuery<T> implements SelectionQuery<T> {
 		return new AiQuery<>( hql, resultClass, session );
 	}
 
-	private SelectionQuery<T> getSelectionQuery() {
+	private SelectionQuery<R> getSelectionQuery() {
 		if ( selectionQuery == null ) {
 			selectionQuery = session.createSelectionQuery( hql, resultClass );
 		}
@@ -61,7 +63,12 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	public Class<?> getResultType() {
-		return ( (AbstractSelectionQuery<T>) getSelectionQuery() ).getResultType();
+		return ( (AbstractSelectionQuery<R>) getSelectionQuery() ).getResultType();
+	}
+
+	public SqmSelectStatement<R> getSqmStatement() {
+		//noinspection unchecked
+		return (SqmSelectStatement<R>) ( (SqmSelectionQuery<R>) getSelectionQuery() ).getSqmStatement();
 	}
 
 	public String getHql() {
@@ -69,52 +76,52 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public List<T> getResultList() {
+	public List<R> getResultList() {
 		return getSelectionQuery().getResultList();
 	}
 
 	@Override
-	public List<T> list() {
+	public List<R> list() {
 		return getSelectionQuery().list();
 	}
 
 	@Override
-	public ScrollableResults<T> scroll() {
+	public ScrollableResults<R> scroll() {
 		return getSelectionQuery().scroll();
 	}
 
 	@Override
-	public ScrollableResults<T> scroll(ScrollMode scrollMode) {
+	public ScrollableResults<R> scroll(ScrollMode scrollMode) {
 		return getSelectionQuery().scroll( scrollMode );
 	}
 
 	@Override
-	public Stream<T> getResultStream() {
+	public Stream<R> getResultStream() {
 		return getSelectionQuery().getResultStream();
 	}
 
 	@Override
-	public Stream<T> stream() {
+	public Stream<R> stream() {
 		return getSelectionQuery().stream();
 	}
 
 	@Override
-	public T uniqueResult() {
+	public R uniqueResult() {
 		return getSelectionQuery().uniqueResult();
 	}
 
 	@Override
-	public T getSingleResult() {
+	public R getSingleResult() {
 		return getSelectionQuery().getSingleResult();
 	}
 
 	@Override
-	public T getSingleResultOrNull() {
+	public R getSingleResultOrNull() {
 		return getSelectionQuery().getSingleResultOrNull();
 	}
 
 	@Override
-	public Optional<T> uniqueResultOptional() {
+	public Optional<R> uniqueResultOptional() {
 		return getSelectionQuery().uniqueResultOptional();
 	}
 
@@ -124,47 +131,47 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public KeyedResultList<T> getKeyedResultList(KeyedPage<T> page) {
+	public KeyedResultList<R> getKeyedResultList(KeyedPage<R> page) {
 		return getSelectionQuery().getKeyedResultList( page );
 	}
 
 	@Override
-	public SelectionQuery<T> setHint(String hintName, Object value) {
+	public SelectionQuery<R> setHint(String hintName, Object value) {
 		return getSelectionQuery().setHint( hintName, value );
 	}
 
 	@Override
-	public SelectionQuery<T> setEntityGraph(EntityGraph<T> graph, GraphSemantic semantic) {
+	public SelectionQuery<R> setEntityGraph(EntityGraph<R> graph, GraphSemantic semantic) {
 		return getSelectionQuery().setEntityGraph( graph, semantic );
 	}
 
 	@Override
-	public SelectionQuery<T> enableFetchProfile(String profileName) {
+	public SelectionQuery<R> enableFetchProfile(String profileName) {
 		return getSelectionQuery().enableFetchProfile( profileName );
 	}
 
 	@Override
-	public SelectionQuery<T> disableFetchProfile(String profileName) {
+	public SelectionQuery<R> disableFetchProfile(String profileName) {
 		return getSelectionQuery().disableFetchProfile( profileName );
 	}
 
 	@Override
-	public SelectionQuery<T> setFlushMode(FlushModeType flushMode) {
+	public SelectionQuery<R> setFlushMode(FlushModeType flushMode) {
 		return getSelectionQuery().setFlushMode( flushMode );
 	}
 
 	@Override
-	public SelectionQuery<T> setHibernateFlushMode(FlushMode flushMode) {
+	public SelectionQuery<R> setHibernateFlushMode(FlushMode flushMode) {
 		return getSelectionQuery().setHibernateFlushMode( flushMode );
 	}
 
 	@Override
-	public SelectionQuery<T> setTimeout(int timeout) {
+	public SelectionQuery<R> setTimeout(int timeout) {
 		return getSelectionQuery().setTimeout( timeout );
 	}
 
 	@Override
-	public SelectionQuery<T> setComment(String comment) {
+	public SelectionQuery<R> setComment(String comment) {
 		return getSelectionQuery().setComment( comment );
 	}
 
@@ -174,7 +181,7 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setFetchSize(int fetchSize) {
+	public SelectionQuery<R> setFetchSize(int fetchSize) {
 		return getSelectionQuery().setFetchSize( fetchSize );
 	}
 
@@ -184,7 +191,7 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setReadOnly(boolean readOnly) {
+	public SelectionQuery<R> setReadOnly(boolean readOnly) {
 		return getSelectionQuery().setReadOnly( readOnly );
 	}
 
@@ -194,7 +201,7 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setMaxResults(int maxResult) {
+	public SelectionQuery<R> setMaxResults(int maxResult) {
 		return getSelectionQuery().setMaxResults( maxResult );
 	}
 
@@ -204,13 +211,13 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setFirstResult(int startPosition) {
+	public SelectionQuery<R> setFirstResult(int startPosition) {
 		return getSelectionQuery().setFirstResult( startPosition );
 	}
 
 	@Incubating
 	@Override
-	public SelectionQuery<T> setPage(Page page) {
+	public SelectionQuery<R> setPage(Page page) {
 		return getSelectionQuery().setPage( page );
 	}
 
@@ -230,17 +237,17 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setCacheMode(CacheMode cacheMode) {
+	public SelectionQuery<R> setCacheMode(CacheMode cacheMode) {
 		return getSelectionQuery().setCacheMode( cacheMode );
 	}
 
 	@Override
-	public SelectionQuery<T> setCacheStoreMode(CacheStoreMode cacheStoreMode) {
+	public SelectionQuery<R> setCacheStoreMode(CacheStoreMode cacheStoreMode) {
 		return getSelectionQuery().setCacheStoreMode( cacheStoreMode );
 	}
 
 	@Override
-	public SelectionQuery<T> setCacheRetrieveMode(CacheRetrieveMode cacheRetrieveMode) {
+	public SelectionQuery<R> setCacheRetrieveMode(CacheRetrieveMode cacheRetrieveMode) {
 		return getSelectionQuery().setCacheRetrieveMode( cacheRetrieveMode );
 	}
 
@@ -250,7 +257,7 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setCacheable(boolean cacheable) {
+	public SelectionQuery<R> setCacheable(boolean cacheable) {
 		return getSelectionQuery().setCacheable( cacheable );
 	}
 
@@ -260,7 +267,7 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setQueryPlanCacheable(boolean queryPlanCacheable) {
+	public SelectionQuery<R> setQueryPlanCacheable(boolean queryPlanCacheable) {
 		return getSelectionQuery().setQueryPlanCacheable( queryPlanCacheable );
 	}
 
@@ -270,7 +277,7 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setCacheRegion(String cacheRegion) {
+	public SelectionQuery<R> setCacheRegion(String cacheRegion) {
 		return getSelectionQuery().setCacheRegion( cacheRegion );
 	}
 
@@ -285,7 +292,7 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setLockMode(LockModeType lockMode) {
+	public SelectionQuery<R> setLockMode(LockModeType lockMode) {
 		return getSelectionQuery().setLockMode( lockMode );
 	}
 
@@ -295,195 +302,195 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public SelectionQuery<T> setHibernateLockMode(LockMode lockMode) {
+	public SelectionQuery<R> setHibernateLockMode(LockMode lockMode) {
 		return getSelectionQuery().setHibernateLockMode( lockMode );
 	}
 
 	@Override
-	public SelectionQuery<T> setLockMode(String alias, LockMode lockMode) {
+	public SelectionQuery<R> setLockMode(String alias, LockMode lockMode) {
 		return getSelectionQuery().setLockMode( alias, lockMode );
 	}
 
 	@Incubating
 	@Override
-	public SelectionQuery<T> setOrder(List<Order<? super T>> orders) {
+	public SelectionQuery<R> setOrder(List<Order<? super R>> orders) {
 		return getSelectionQuery().setOrder( orders );
 	}
 
 	@Incubating
 	@Override
-	public SelectionQuery<T> setOrder(Order<? super T> order) {
+	public SelectionQuery<R> setOrder(Order<? super R> order) {
 		return getSelectionQuery().setOrder( order );
 	}
 
 	@Deprecated(since = "6.2")
 	@Override
-	public @Remove SelectionQuery<T> setAliasSpecificLockMode(String alias, LockMode lockMode) {
+	public @Remove SelectionQuery<R> setAliasSpecificLockMode(String alias, LockMode lockMode) {
 		return getSelectionQuery().setAliasSpecificLockMode( alias, lockMode );
 	}
 
 	@Override
-	public SelectionQuery<T> setFollowOnLocking(boolean enable) {
+	public SelectionQuery<R> setFollowOnLocking(boolean enable) {
 		return getSelectionQuery().setFollowOnLocking( enable );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(String name, Object value) {
+	public SelectionQuery<R> setParameter(String name, Object value) {
 		return getSelectionQuery().setParameter( name, value );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameter(String name, P value, Class<P> type) {
+	public <P> SelectionQuery<R> setParameter(String name, P value, Class<P> type) {
 		return getSelectionQuery().setParameter( name, value, type );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameter(String name, P value, BindableType<P> type) {
+	public <P> SelectionQuery<R> setParameter(String name, P value, BindableType<P> type) {
 		return getSelectionQuery().setParameter( name, value, type );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(String name, Instant value, TemporalType temporalType) {
+	public SelectionQuery<R> setParameter(String name, Instant value, TemporalType temporalType) {
 		return getSelectionQuery().setParameter( name, value, temporalType );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(String name, Calendar value, TemporalType temporalType) {
+	public SelectionQuery<R> setParameter(String name, Calendar value, TemporalType temporalType) {
 		return getSelectionQuery().setParameter( name, value, temporalType );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(String name, Date value, TemporalType temporalType) {
+	public SelectionQuery<R> setParameter(String name, Date value, TemporalType temporalType) {
 		return getSelectionQuery().setParameter( name, value, temporalType );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(int position, Object value) {
+	public SelectionQuery<R> setParameter(int position, Object value) {
 		return getSelectionQuery().setParameter( position, value );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameter(int position, P value, Class<P> type) {
+	public <P> SelectionQuery<R> setParameter(int position, P value, Class<P> type) {
 		return getSelectionQuery().setParameter( position, value, type );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameter(int position, P value, BindableType<P> type) {
+	public <P> SelectionQuery<R> setParameter(int position, P value, BindableType<P> type) {
 		return getSelectionQuery().setParameter( position, value, type );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(int position, Instant value, TemporalType temporalType) {
+	public SelectionQuery<R> setParameter(int position, Instant value, TemporalType temporalType) {
 		return getSelectionQuery().setParameter( position, value, temporalType );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(int position, Date value, TemporalType temporalType) {
+	public SelectionQuery<R> setParameter(int position, Date value, TemporalType temporalType) {
 		return getSelectionQuery().setParameter( position, value, temporalType );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(int position, Calendar value, TemporalType temporalType) {
+	public SelectionQuery<R> setParameter(int position, Calendar value, TemporalType temporalType) {
 		return getSelectionQuery().setParameter( position, value, temporalType );
 	}
 
 	@Override
-	public <T1> SelectionQuery<T> setParameter(QueryParameter<T1> parameter, T1 value) {
+	public <T1> SelectionQuery<R> setParameter(QueryParameter<T1> parameter, T1 value) {
 		return getSelectionQuery().setParameter( parameter, value );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameter(QueryParameter<P> parameter, P value, Class<P> type) {
+	public <P> SelectionQuery<R> setParameter(QueryParameter<P> parameter, P value, Class<P> type) {
 		return getSelectionQuery().setParameter( parameter, value, type );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameter(QueryParameter<P> parameter, P val, BindableType<P> type) {
+	public <P> SelectionQuery<R> setParameter(QueryParameter<P> parameter, P val, BindableType<P> type) {
 		return getSelectionQuery().setParameter( parameter, val, type );
 	}
 
 	@Override
-	public <T1> SelectionQuery<T> setParameter(Parameter<T1> param, T1 value) {
+	public <T1> SelectionQuery<R> setParameter(Parameter<T1> param, T1 value) {
 		return getSelectionQuery().setParameter( param, value );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(Parameter<Calendar> param, Calendar value, TemporalType temporalType) {
+	public SelectionQuery<R> setParameter(Parameter<Calendar> param, Calendar value, TemporalType temporalType) {
 		return getSelectionQuery().setParameter( param, value, temporalType );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameter(Parameter<Date> param, Date value, TemporalType temporalType) {
+	public SelectionQuery<R> setParameter(Parameter<Date> param, Date value, TemporalType temporalType) {
 		return getSelectionQuery().setParameter( param, value, temporalType );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameterList(String name, Collection values) {
+	public SelectionQuery<R> setParameterList(String name, Collection values) {
 		return getSelectionQuery().setParameterList( name, values );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(String name, Collection<? extends P> values, Class<P> javaType) {
+	public <P> SelectionQuery<R> setParameterList(String name, Collection<? extends P> values, Class<P> javaType) {
 		return getSelectionQuery().setParameterList( name, values, javaType );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(String name, Collection<? extends P> values, BindableType<P> type) {
+	public <P> SelectionQuery<R> setParameterList(String name, Collection<? extends P> values, BindableType<P> type) {
 		return getSelectionQuery().setParameterList( name, values, type );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameterList(String name, Object[] values) {
+	public SelectionQuery<R> setParameterList(String name, Object[] values) {
 		return getSelectionQuery().setParameterList( name, values );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(String name, P[] values, Class<P> javaType) {
+	public <P> SelectionQuery<R> setParameterList(String name, P[] values, Class<P> javaType) {
 		return getSelectionQuery().setParameterList( name, values, javaType );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(String name, P[] values, BindableType<P> type) {
+	public <P> SelectionQuery<R> setParameterList(String name, P[] values, BindableType<P> type) {
 		return getSelectionQuery().setParameterList( name, values, type );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameterList(int position, Collection values) {
+	public SelectionQuery<R> setParameterList(int position, Collection values) {
 		return getSelectionQuery().setParameterList( position, values );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(int position, Collection<? extends P> values, Class<P> javaType) {
+	public <P> SelectionQuery<R> setParameterList(int position, Collection<? extends P> values, Class<P> javaType) {
 		return getSelectionQuery().setParameterList( position, values, javaType );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(int position, Collection<? extends P> values, BindableType<P> type) {
+	public <P> SelectionQuery<R> setParameterList(int position, Collection<? extends P> values, BindableType<P> type) {
 		return getSelectionQuery().setParameterList( position, values, type );
 	}
 
 	@Override
-	public SelectionQuery<T> setParameterList(int position, Object[] values) {
+	public SelectionQuery<R> setParameterList(int position, Object[] values) {
 		return getSelectionQuery().setParameterList( position, values );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(int position, P[] values, Class<P> javaType) {
+	public <P> SelectionQuery<R> setParameterList(int position, P[] values, Class<P> javaType) {
 		return getSelectionQuery().setParameterList( position, values, javaType );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(int position, P[] values, BindableType<P> type) {
+	public <P> SelectionQuery<R> setParameterList(int position, P[] values, BindableType<P> type) {
 		return getSelectionQuery().setParameterList( position, values, type );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(QueryParameter<P> parameter, Collection<? extends P> values) {
+	public <P> SelectionQuery<R> setParameterList(QueryParameter<P> parameter, Collection<? extends P> values) {
 		return getSelectionQuery().setParameterList( parameter, values );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(
+	public <P> SelectionQuery<R> setParameterList(
 			QueryParameter<P> parameter,
 			Collection<? extends P> values,
 			Class<P> javaType) {
@@ -491,7 +498,7 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(
+	public <P> SelectionQuery<R> setParameterList(
 			QueryParameter<P> parameter,
 			Collection<? extends P> values,
 			BindableType<P> type) {
@@ -499,27 +506,27 @@ public class AiQuery<T> implements SelectionQuery<T> {
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(QueryParameter<P> parameter, P[] values) {
+	public <P> SelectionQuery<R> setParameterList(QueryParameter<P> parameter, P[] values) {
 		return getSelectionQuery().setParameterList( parameter, values );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(QueryParameter<P> parameter, P[] values, Class<P> javaType) {
+	public <P> SelectionQuery<R> setParameterList(QueryParameter<P> parameter, P[] values, Class<P> javaType) {
 		return getSelectionQuery().setParameterList( parameter, values, javaType );
 	}
 
 	@Override
-	public <P> SelectionQuery<T> setParameterList(QueryParameter<P> parameter, P[] values, BindableType<P> type) {
+	public <P> SelectionQuery<R> setParameterList(QueryParameter<P> parameter, P[] values, BindableType<P> type) {
 		return getSelectionQuery().setParameterList( parameter, values, type );
 	}
 
 	@Override
-	public SelectionQuery<T> setProperties(Object bean) {
+	public SelectionQuery<R> setProperties(Object bean) {
 		return getSelectionQuery().setProperties( bean );
 	}
 
 	@Override
-	public SelectionQuery<T> setProperties(Map bean) {
+	public SelectionQuery<R> setProperties(Map bean) {
 		return getSelectionQuery().setProperties( bean );
 	}
 
