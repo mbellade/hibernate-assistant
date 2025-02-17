@@ -1,24 +1,13 @@
 package org.hibernate.assistant.internal;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
 import org.hibernate.assistant.AiQuery;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
-import org.hibernate.metamodel.model.domain.EmbeddableDomainType;
-import org.hibernate.metamodel.model.domain.EntityDomainType;
 import org.hibernate.metamodel.model.domain.ManagedDomainType;
-import org.hibernate.metamodel.model.domain.spi.JpaMetamodelImplementor;
-import org.hibernate.persister.entity.EntityPersister;
-import org.hibernate.query.sqm.tree.domain.SqmPath;
-import org.hibernate.query.sqm.tree.from.SqmRoot;
-import org.hibernate.query.sqm.tree.select.SqmSelectStatement;
-import org.hibernate.query.sqm.tree.select.SqmSelectableNode;
-import org.hibernate.query.sqm.tree.select.SqmSelection;
-import org.hibernate.type.ComponentType;
-import org.hibernate.type.descriptor.java.JavaType;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EmbeddableType;
 import jakarta.persistence.metamodel.EntityType;
@@ -116,9 +105,14 @@ public class AssistantUtils {
 	 * cleanly, but it doesn't print the whole object tree - that would pose a problem
 	 * of circularity, so we'll have to explore options to handle that.
 	 */
-	public static String serializeToString(Object result, AiQuery<?> query, SessionFactoryImplementor factory) {
+	public static String serializeToString(List<?> resultList, AiQuery<?> query, SessionFactoryImplementor factory) {
 		// This is the result type determined from the HQL interpretation
-		final Class<?> resultType = query.getResultType();
-		return new HibernateSerializer( factory ).serializeToString( result, query, resultType );
+		try {
+			return new HibernateSerializer( factory ).serializeToString( resultList, query );
+		}
+		catch (JsonProcessingException e) {
+			// todo : better error message
+			throw new RuntimeException( e );
+		}
 	}
 }

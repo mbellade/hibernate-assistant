@@ -1,6 +1,5 @@
 package org.hibernate.assistant.lc4j;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -12,8 +11,6 @@ import org.hibernate.assistant.HibernateAssistant;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.metamodel.model.domain.JpaMetamodel;
 import org.hibernate.metamodel.model.domain.ManagedDomainType;
-import org.hibernate.metamodel.model.domain.NavigableRole;
-import org.hibernate.query.sqm.tree.domain.SqmPath;
 
 import org.jboss.logging.Logger;
 
@@ -328,14 +325,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 			return "The query did not return any results.";
 		}
 
-		final List<String> resultRows = new ArrayList<>();
-		resultList.forEach( result -> resultRows.add( serializeToString(
-				result,
-				query,
-				(SessionFactoryImplementor) session.getSessionFactory()
-		) ) );
-
-		return String.join( "\n", resultRows );
+		return serializeToString( resultList, query, (SessionFactoryImplementor) session.getFactory() );
 	}
 
 	record HqlHolder(String hqlQuery) {

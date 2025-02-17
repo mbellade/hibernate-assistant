@@ -2,224 +2,292 @@ package org.hibernate.assistant.internal;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 import org.hibernate.Hibernate;
 import org.hibernate.HibernateException;
 import org.hibernate.assistant.AiQuery;
 import org.hibernate.bytecode.enhance.spi.LazyPropertyInitializer;
+import org.hibernate.collection.spi.CollectionSemantics;
+import org.hibernate.collection.spi.PersistentCollection;
+import org.hibernate.collection.spi.PersistentMap;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
-import org.hibernate.engine.spi.SharedSessionContractImplementor;
-import org.hibernate.metamodel.model.domain.EmbeddableDomainType;
-import org.hibernate.metamodel.model.domain.EntityDomainType;
-import org.hibernate.metamodel.model.domain.ManagedDomainType;
-import org.hibernate.metamodel.model.domain.spi.JpaMetamodelImplementor;
+import org.hibernate.metamodel.mapping.AttributeMapping;
+import org.hibernate.metamodel.mapping.BasicValuedModelPart;
+import org.hibernate.metamodel.mapping.CollectionPart;
+import org.hibernate.metamodel.mapping.EntityValuedModelPart;
+import org.hibernate.metamodel.mapping.ManagedMappingType;
+import org.hibernate.metamodel.mapping.PluralAttributeMapping;
+import org.hibernate.metamodel.mapping.internal.EmbeddedAttributeMapping;
+import org.hibernate.metamodel.mapping.internal.EmbeddedCollectionPart;
+import org.hibernate.metamodel.mapping.internal.EntityCollectionPart;
 import org.hibernate.persister.entity.EntityPersister;
+import org.hibernate.query.sqm.SqmExpressible;
+import org.hibernate.query.sqm.tree.SqmExpressibleAccessor;
 import org.hibernate.query.sqm.tree.domain.SqmPath;
 import org.hibernate.query.sqm.tree.from.SqmEntityJoin;
 import org.hibernate.query.sqm.tree.from.SqmRoot;
+import org.hibernate.query.sqm.tree.select.SqmJpaCompoundSelection;
 import org.hibernate.query.sqm.tree.select.SqmSelectStatement;
-import org.hibernate.query.sqm.tree.select.SqmSelectableNode;
 import org.hibernate.query.sqm.tree.select.SqmSelection;
-import org.hibernate.type.CollectionType;
-import org.hibernate.type.ComponentType;
-import org.hibernate.type.EntityType;
-import org.hibernate.type.Type;
 import org.hibernate.type.descriptor.java.JavaType;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.Tuple;
+import jakarta.persistence.criteria.Selection;
 
 public class HibernateSerializer {
 	private final SessionFactoryImplementor factory;
+	private final ObjectMapper objectMapper;
 
 	public HibernateSerializer(SessionFactoryImplementor factory) {
 		this.factory = factory;
+		this.objectMapper = new ObjectMapper();
 	}
 
-	public String serializeToString(Object result, AiQuery<?> query, Class<?> resultType) {
-		if ( result == null ) {
-			return "<null>";
+	public String serializeToString(List<?> resultList, AiQuery<?> query) throws JsonProcessingException {
+		if ( resultList.isEmpty() ) {
+			return "[]";
 		}
 
-		if ( resultType != null && resultType != Object.class ) {
-			if ( resultType.isArray() ) {
-				Object[] array = (Object[]) result;
-				List<String> results = new ArrayList<>( array.length );
-				for ( Object r : array ) {
-					results.add( serializeToString( r, query, r == null ? null : r.getClass() ) );
-				}
-				return "[" + String.join( ",", results ) + "]";
-			}
-			else {
-				final JpaMetamodelImplementor metamodel = factory.getRuntimeMetamodels().getJpaMetamodel();
-				final ManagedDomainType<?> managedType = metamodel.findManagedType( resultType );
-				if ( managedType instanceof EntityDomainType<?> entityType ) {
-					final EntityPersister entityDescriptor = metamodel.getMappingMetamodel().getEntityDescriptor(
-							entityType.getHibernateEntityName() );
-					return toString( result, entityDescriptor.getEntityName() );
-				}
-				else if ( managedType instanceof EmbeddableDomainType<?> embeddable ) {
-					// todo : we need to retrieve the ComponentType for this embeddable
-					final ComponentType componentType = getComponentType( query, factory );
-					if ( componentType != null ) {
-						return toString( result, componentType );
-					}
-				}
-				// todo : we should also specially handle mapped-superclass typed results
-				else {
-					// resort to resolving based on Hibernate's knowledge of the type
-					final JavaType<Object> descriptor = factory.getTypeConfiguration()
-							.getJavaTypeRegistry()
-							.getDescriptor( resultType );
-					if ( descriptor != null ) {
-						// todo : we might do better than this if we could resolve the org.hibernate.Type
-						return descriptor.toString( result );
-					}
-				}
-			}
+		if ( resultList.size() == 1 ) {
+			return renderValue( resultList.getFirst(), query, objectMapper, factory );
 		}
-
-		// As a last stand, just rely on the object's toString() method
-		return result.toString();
-	}
-
-	/**
-	 * Renders an entity to a string.
-	 *
-	 * @param entity an actual entity object, not a proxy!
-	 * @param entityName the entity name
-	 *
-	 * @return the entity rendered to a string
-	 */
-	private String toString(Object entity, String entityName) throws HibernateException {
-		final EntityPersister entityPersister = factory.getMappingMetamodel()
-				.getEntityDescriptor( entityName );
-
-		if ( entityPersister == null ) {
-			throw new IllegalArgumentException( "Not a valid entity name: " + entityName );
-		}
-		else if ( !entityPersister.isInstance( entity ) ) {
-			throw new IllegalArgumentException( "Provided object is not an instance of " + entityName );
-		}
-
-		final Map<String, String> result = new HashMap<>();
-
-		if ( entityPersister.hasIdentifierProperty() ) {
-			result.put(
-					entityPersister.getIdentifierPropertyName(),
-					entityPersister.getIdentifierType().toLoggableString(
-							entityPersister.getIdentifier( entity, (SharedSessionContractImplementor) null ),
-							factory
-					)
-			);
-		}
-
-		final Type[] types = entityPersister.getPropertyTypes();
-		final String[] names = entityPersister.getPropertyNames();
-		final Object[] values = entityPersister.getValues( entity );
-		renderAttributeValues( types, names, values, result );
-		return entityName + "=" + result;
-	}
-
-	private String toString(Object value, Type type) {
-		assert type != null;
-		// We know the property is initialized here, explore associations
-		switch ( type ) {
-			case EntityType entityType -> {
-				return toString( value, entityType.getName() );
+		else {
+			final List<String> results = new ArrayList<>( resultList.size() );
+			for ( final Object value : resultList ) {
+				results.add( renderValue( value, query, objectMapper, factory ) );
 			}
-			case CollectionType collectionType -> {
-				final List<String> list = new ArrayList<>();
-				final Type elementType = collectionType.getElementType( factory );
-				final Iterator<?> elementsIterator = collectionType.getElementsIterator( value );
-				while ( elementsIterator.hasNext() ) {
-					final Object element = elementsIterator.next();
-					list.add( toString( element, elementType ) );
-				}
-				return list.toString();
-			}
-			case ComponentType componentType -> {
-				return toString( value, componentType );
-			}
-			default -> {
-				return type.toLoggableString( value, factory );
-			}
-		}
-
-		// todo : handle mapped-superclass types ?
-	}
-
-	private String toString(Object value, ComponentType componentType) {
-		final Map<String, String> result = new HashMap<>();
-		final Type[] types = componentType.getSubtypes();
-		final String[] names = componentType.getPropertyNames();
-		final Object[] values = componentType.getPropertyValues( value );
-		renderAttributeValues( types, names, values, result );
-		return result.toString();
-	}
-
-	private void renderAttributeValues(Type[] types, String[] names, Object[] values, Map<String, String> result) {
-		for ( int i = 0; i < types.length; i++ ) {
-			if ( !names[i].startsWith( "_" ) ) {
-				final String strValue;
-				if ( values[i] == LazyPropertyInitializer.UNFETCHED_PROPERTY ) {
-					strValue = values[i].toString();
-				}
-				else if ( !Hibernate.isInitialized( values[i] ) ) {
-					strValue = "<uninitialized>";
-				}
-				else {
-					strValue = toString( values[i], types[i] );
-				}
-				result.put( names[i], strValue );
-			}
+			return results.toString();
 		}
 	}
 
-	private static ComponentType getComponentType(AiQuery<?> query, SessionFactoryImplementor factory) {
-		// tries to extract the ComponentType from the query, assuming it's the only selection
+	private static String renderValue(
+			Object value,
+			AiQuery<?> query,
+			ObjectMapper objectMapper,
+			SessionFactoryImplementor factory) throws JsonProcessingException {
 		final SqmSelectStatement<?> sqm = query.getSqmStatement();
 		final List<SqmSelection<?>> selections = sqm.getQuerySpec().getSelectClause().getSelections();
-		if ( selections.size() == 1 ) {
-			final SqmSelectableNode<?> selectableNode = selections.getFirst().getSelectableNode();
-			if ( selectableNode instanceof SqmPath<?> path ) {
-				return getComponentType( path, factory );
+		final ArrayList<String> result = new ArrayList<>( selections.size() );
+		for ( SqmSelection<?> selection : selections ) {
+			result.add( renderValue( value, selection.getSelectableNode(), objectMapper, factory ) );
+		}
+		return result.size() == 1 ? result.getFirst() : result.toString();
+	}
+
+	private static String renderValue(
+			Object value,
+			Selection<?> selection,
+			ObjectMapper objectMapper,
+			SessionFactoryImplementor factory) throws JsonProcessingException {
+		return switch ( selection ) {
+			case SqmRoot<?> root -> {
+				final EntityPersister persister = factory.getMappingMetamodel()
+						.getEntityDescriptor( root.getEntityName() );
+				yield objectMapper.writeValueAsString( getManagedTypeProperties( value, persister ) );
+			}
+			case SqmPath<?> path -> {
+				// extract the attribute from the path
+				final AttributeMapping attributeMapping = getAttributeMapping(
+						path.getLhs(),
+						path.getNavigablePath().getLocalName(),
+						factory
+				);
+				yield attributeMapping != null ?
+						objectMapper.writeValueAsString( getAttributeValue( value, attributeMapping ) ) :
+						toString( path, value );
+			}
+			case SqmJpaCompoundSelection<?> compoundSelection -> {
+				final List<Selection<?>> compoundSelectionItems = compoundSelection.getCompoundSelectionItems();
+				assert compoundSelectionItems.size() > 1;
+				final List<String> results = new ArrayList<>( compoundSelectionItems.size() );
+				for ( int j = 0; j < compoundSelectionItems.size(); j++ ) {
+					results.add( renderValue(
+							getValue( value, j ),
+							compoundSelectionItems.get( j ),
+							objectMapper,
+							factory
+					) );
+				}
+				yield results.toString();
+			}
+			case SqmExpressibleAccessor<?> node -> toString( node, value );
+			// todo : we might need to handle other special cases
+			case null, default -> value.toString(); // best effort
+		};
+	}
+
+	private static String toString(SqmExpressibleAccessor<?> node, Object value) {
+		//noinspection unchecked
+		final SqmExpressible<Object> expressible = (SqmExpressible<Object>) node.getExpressible();
+		return expressible != null ?
+				expressible.getExpressibleJavaType().toString( value ) :
+				value.toString(); // best effort
+	}
+
+	private static Object getValue(Object value, int index) {
+		if ( value.getClass().isArray() ) {
+			return ( (Object[]) value )[index];
+		}
+		else if ( value instanceof Tuple tuple ) {
+			return tuple.get( index );
+		}
+		else {
+			if ( index > 0 ) {
+				throw new IllegalArgumentException( "Index out of range: " + index );
+			}
+			return value;
+		}
+	}
+
+	private static AttributeMapping getAttributeMapping(
+			SqmPath<?> path,
+			String propertyName,
+			SessionFactoryImplementor factory) {
+		if ( path instanceof SqmRoot<?> root ) {
+			return getAttributeMapping( root.getEntityName(), propertyName, factory );
+		}
+		else if ( path instanceof SqmEntityJoin<?> join ) {
+			return getAttributeMapping( join.getEntityName(), propertyName, factory );
+		}
+		else {
+			// must be an embedded
+			final AttributeMapping attributeMapping = getAttributeMapping( path.getLhs(), propertyName, factory );
+			final EmbeddedAttributeMapping embedded = attributeMapping != null ?
+					attributeMapping.asEmbeddedAttributeMapping() :
+					null;
+			if ( embedded != null ) {
+				return embedded.getEmbeddableTypeDescriptor().findAttributeMapping( propertyName );
 			}
 		}
+
+		// todo : we'll have to handle more cases here
+
 		return null;
 	}
 
-	private static ComponentType getComponentType(SqmPath<?> path, SessionFactoryImplementor factory) {
-		// todo : this needs to be reviewed / improved to handle most cases
-		// tries to extract the ComponentType from a path
-		final org.hibernate.type.Type propertyType;
-		final SqmPath<?> lhs = path.getLhs();
-		final String localName = path.getNavigablePath().getLocalName();
-		if ( lhs instanceof SqmRoot<?> root ) {
-			propertyType = getPropertyType( root.getEntityName(), localName, factory );
+	private static AttributeMapping getAttributeMapping(
+			String entityName,
+			String propertyName,
+			SessionFactoryImplementor factory) {
+		final EntityPersister entityDescriptor = factory.getMappingMetamodel().getEntityDescriptor( entityName );
+		return entityDescriptor.findAttributeMapping( propertyName );
+	}
+
+	private static Object getAttributeValue(Object value, AttributeMapping attributeMapping) {
+		// null / unfeched / lazy properties
+		if ( value == null ) {
+			return "null";
 		}
-		else if ( lhs instanceof SqmEntityJoin<?> join ) {
-			propertyType = getPropertyType( join.getEntityName(), localName, factory );
+		else if ( value == LazyPropertyInitializer.UNFETCHED_PROPERTY ) {
+			return value.toString();
 		}
-		else {
-			// assume lhs is another component
-			final ComponentType componentType = getComponentType( lhs, factory );
-			assert componentType != null;
-			final int propertyIndex = componentType.getPropertyIndex( localName );
-			propertyType = componentType.getSubtypes()[propertyIndex];
+		else if ( !Hibernate.isInitialized( value ) ) {
+			return "<uninitialized>";
 		}
 
-		if ( propertyType instanceof ComponentType componentType ) {
-			return componentType;
+		// basic
+		final BasicValuedModelPart basic = attributeMapping.asBasicValuedModelPart();
+		if ( basic != null ) {
+			return getBasicValue( value, basic );
+		}
+
+		// embedded
+		final EmbeddedAttributeMapping embedded = attributeMapping.asEmbeddedAttributeMapping();
+		if ( embedded != null ) {
+			return getManagedTypeProperties( value, embedded.getEmbeddableTypeDescriptor() );
+		}
+
+		// entity
+		if ( attributeMapping instanceof EntityValuedModelPart entity ) {
+			return getManagedTypeProperties( value, entity.getEntityMappingType() );
+		}
+
+		// plural
+		final PluralAttributeMapping plural = attributeMapping.asPluralAttributeMapping();
+		if ( plural != null ) {
+			final CollectionPart element = plural.getElementDescriptor();
+			final CollectionSemantics<?, ?> collectionSemantics = plural.getMappedType().getCollectionSemantics();
+			switch ( collectionSemantics.getCollectionClassification() ) {
+				case MAP:
+					final PersistentMap<?, ?> pm = (PersistentMap<?, ?>) value;
+					final Map<Object, Object> map = new HashMap<>( pm.size() );
+					collectMapProperties( pm, plural.getIndexDescriptor(), element, map );
+					return map;
+				case SORTED_MAP:
+				case ORDERED_MAP:
+					final PersistentMap<?, ?> pm1 = (PersistentMap<?, ?>) value;
+					final SortedMap<Object, Object> sortedMap = new TreeMap<>();
+					collectMapProperties( pm1, plural.getIndexDescriptor(), element, sortedMap );
+					return sortedMap;
+				default:
+					final PersistentCollection<?> pc = (PersistentCollection<?>) value;
+					final List<Object> list = new ArrayList<>( pc.getSize() );
+					pc.entries( plural.getCollectionDescriptor() ).forEachRemaining( v -> list.add(
+							getCollectionPartValue( v, element ) )
+					);
+					return list;
+			}
+		}
+
+		throw new IllegalArgumentException( "Unsupported attribute type '" + attributeMapping.getAttributeName() + "'" );
+	}
+
+	private static Object getBasicValue(Object value, BasicValuedModelPart basic) {
+		if ( value instanceof Number ) {
+			// numeric values can be left as-is
+			return value;
 		}
 		else {
-			return null;
+			//noinspection unchecked
+			final JavaType<Object> javaType = (JavaType<Object>) basic.getJavaType();
+			return javaType.toString( value );
 		}
 	}
 
-	private static Type getPropertyType(String entityName, String propertyName, SessionFactoryImplementor factory) {
-		final EntityPersister entityDescriptor = factory.getMappingMetamodel().getEntityDescriptor( entityName );
-		//noinspection removal
-		return entityDescriptor.getPropertyType( propertyName );
+	private static Map<String, Object> getManagedTypeProperties(Object value, ManagedMappingType managedType) {
+		final Map<String, Object> properties = new HashMap<>( managedType.getNumberOfAttributeMappings() );
+		managedType.forEachAttributeMapping( a -> properties.put(
+				a.getAttributeName(),
+				getAttributeValue( a.getValue( value ), a )
+		) );
+		return properties;
+	}
+
+	private static Object getCollectionPartValue(Object value, CollectionPart collectionPart) {
+		final BasicValuedModelPart basic = collectionPart.asBasicValuedModelPart();
+		if ( basic != null ) {
+			return getBasicValue( value, basic );
+		}
+
+		if ( collectionPart instanceof EmbeddedCollectionPart embedded ) {
+			return getManagedTypeProperties( value, embedded.getEmbeddableTypeDescriptor() );
+		}
+
+		if ( collectionPart instanceof EntityCollectionPart entity ) {
+			return getManagedTypeProperties( value, entity.getEntityMappingType() );
+		}
+
+		// todo : many-to-any ?
+		throw new IllegalArgumentException( "Unsupported collection part type '" + collectionPart.getClass()
+				.getName() + "'" );
+	}
+
+	private static <K, E> void collectMapProperties(
+			PersistentMap<K, E> map,
+			CollectionPart key,
+			CollectionPart value,
+			Map<Object, Object> properties) {
+		for ( final Map.Entry<K, E> entry : map.entrySet() ) {
+			properties.put(
+					getCollectionPartValue( entry.getKey(), key ),
+					getCollectionPartValue( entry.getValue(), value )
+			);
+		}
 	}
 }
