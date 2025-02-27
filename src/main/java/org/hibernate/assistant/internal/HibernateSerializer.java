@@ -8,16 +8,18 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 import org.hibernate.Hibernate;
-import org.hibernate.HibernateException;
 import org.hibernate.assistant.AiQuery;
 import org.hibernate.bytecode.enhance.spi.LazyPropertyInitializer;
 import org.hibernate.collection.spi.CollectionSemantics;
 import org.hibernate.collection.spi.PersistentCollection;
 import org.hibernate.collection.spi.PersistentMap;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
+import org.hibernate.internal.util.collections.IdentitySet;
 import org.hibernate.metamodel.mapping.AttributeMapping;
 import org.hibernate.metamodel.mapping.BasicValuedModelPart;
 import org.hibernate.metamodel.mapping.CollectionPart;
+import org.hibernate.metamodel.mapping.EntityIdentifierMapping;
+import org.hibernate.metamodel.mapping.EntityMappingType;
 import org.hibernate.metamodel.mapping.EntityValuedModelPart;
 import org.hibernate.metamodel.mapping.ManagedMappingType;
 import org.hibernate.metamodel.mapping.PluralAttributeMapping;
@@ -44,6 +46,8 @@ public class HibernateSerializer {
 	private final SessionFactoryImplementor factory;
 	private final ObjectMapper objectMapper;
 
+	private Map<String, IdentitySet<Object>> circularityTracker;
+
 	public HibernateSerializer(SessionFactoryImplementor factory) {
 		this.factory = factory;
 		this.objectMapper = new ObjectMapper();
@@ -54,19 +58,27 @@ public class HibernateSerializer {
 			return "[]";
 		}
 
+		final String result;
 		if ( resultList.size() == 1 ) {
-			return renderValue( resultList.getFirst(), query, objectMapper, factory );
+			result = renderValue( resultList.getFirst(), query, objectMapper, factory );
 		}
 		else {
 			final List<String> results = new ArrayList<>( resultList.size() );
 			for ( final Object value : resultList ) {
 				results.add( renderValue( value, query, objectMapper, factory ) );
 			}
-			return results.toString();
+			result = results.toString();
 		}
+
+		if ( circularityTracker != null ) {
+			circularityTracker.clear();
+			circularityTracker = null;
+		}
+
+		return result;
 	}
 
-	private static String renderValue(
+	private String renderValue(
 			Object value,
 			AiQuery<?> query,
 			ObjectMapper objectMapper,
@@ -80,7 +92,7 @@ public class HibernateSerializer {
 		return result.size() == 1 ? result.getFirst() : result.toString();
 	}
 
-	private static String renderValue(
+	private String renderValue(
 			Object value,
 			Selection<?> selection,
 			ObjectMapper objectMapper,
@@ -89,7 +101,7 @@ public class HibernateSerializer {
 			case SqmRoot<?> root -> {
 				final EntityPersister persister = factory.getMappingMetamodel()
 						.getEntityDescriptor( root.getEntityName() );
-				yield objectMapper.writeValueAsString( getManagedTypeProperties( value, persister ) );
+				yield objectMapper.writeValueAsString( getEntity( value, persister ) );
 			}
 			case SqmPath<?> path -> {
 				// extract the attribute from the path
@@ -179,7 +191,7 @@ public class HibernateSerializer {
 		return entityDescriptor.findAttributeMapping( propertyName );
 	}
 
-	private static Object getAttributeValue(Object value, AttributeMapping attributeMapping) {
+	private Object getAttributeValue(Object value, AttributeMapping attributeMapping) {
 		// null / unfeched / lazy properties
 		if ( value == null ) {
 			return "null";
@@ -205,7 +217,7 @@ public class HibernateSerializer {
 
 		// entity
 		if ( attributeMapping instanceof EntityValuedModelPart entity ) {
-			return getManagedTypeProperties( value, entity.getEntityMappingType() );
+			return getEntity( value, entity.getEntityMappingType().getEntityPersister() );
 		}
 
 		// plural
@@ -250,7 +262,13 @@ public class HibernateSerializer {
 		}
 	}
 
-	private static Map<String, Object> getManagedTypeProperties(Object value, ManagedMappingType managedType) {
+	private Object getEntity(Object value, EntityPersister persister) {
+		return wasEntityEncountered( value, persister ) ?
+				entityIdentityString( value, persister ) :
+				getManagedTypeProperties( value, persister );
+	}
+
+	private Map<String, Object> getManagedTypeProperties(Object value, ManagedMappingType managedType) {
 		final Map<String, Object> properties = new HashMap<>( managedType.getNumberOfAttributeMappings() );
 		managedType.forEachAttributeMapping( a -> properties.put(
 				a.getAttributeName(),
@@ -259,7 +277,18 @@ public class HibernateSerializer {
 		return properties;
 	}
 
-	private static Object getCollectionPartValue(Object value, CollectionPart collectionPart) {
+	private static String entityIdentityString(Object value, EntityPersister entityType) {
+		final EntityIdentifierMapping identifierMapping = entityType.getIdentifierMapping();
+		final Object identifier = identifierMapping.getIdentifier( value );
+		// todo : using toLoggableString might be enough,
+		//  but we should probably adapt getAttributeValue to handle all identifier types
+		return entityType.getEntityName() + "#" + entityType.getIdentifierType().toLoggableString(
+				identifier,
+				entityType.getFactory()
+		);
+	}
+
+	private Object getCollectionPartValue(Object value, CollectionPart collectionPart) {
 		final BasicValuedModelPart basic = collectionPart.asBasicValuedModelPart();
 		if ( basic != null ) {
 			return getBasicValue( value, basic );
@@ -270,7 +299,7 @@ public class HibernateSerializer {
 		}
 
 		if ( collectionPart instanceof EntityCollectionPart entity ) {
-			return getManagedTypeProperties( value, entity.getEntityMappingType() );
+			return getEntity( value, entity.getEntityMappingType().getEntityPersister() );
 		}
 
 		// todo : many-to-any ?
@@ -278,7 +307,7 @@ public class HibernateSerializer {
 				.getName() + "'" );
 	}
 
-	private static <K, E> void collectMapProperties(
+	private <K, E> void collectMapProperties(
 			PersistentMap<K, E> map,
 			CollectionPart key,
 			CollectionPart value,
@@ -289,5 +318,12 @@ public class HibernateSerializer {
 					getCollectionPartValue( entry.getValue(), value )
 			);
 		}
+	}
+
+	private boolean wasEntityEncountered(Object entity, EntityMappingType entityType) {
+		if ( circularityTracker == null ) {
+			circularityTracker = new HashMap<>();
+		}
+		return circularityTracker.computeIfAbsent( entityType.getEntityName(), k -> new IdentitySet<>() ).add( entity );
 	}
 }
