@@ -170,12 +170,8 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 		return metamodelPromptTemplate.apply( getDomainModelPrompt( metamodel ) ).toSystemMessage();
 	}
 
-	/**
-	 * Reset the assistant's {@link ChatMemory} to return to a clean state. This should be done each
-	 * time you create a new {@link AiQuery}, unless you're relying on the context of previous
-	 * requests to formulate your current question.
-	 */
-	public void clearMemory() {
+	@Override
+	public void clear() {
 		this.chatMemory.clear();
 		this.chatMemory.add( metamodelPrompt );
 	}

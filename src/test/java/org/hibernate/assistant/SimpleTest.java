@@ -75,6 +75,8 @@ public class SimpleTest {
 			System.out.println( "Companies : " + companies.size() );
 			companies.forEach( company -> System.out.println( "Name: " + company.getName() ) );
 
+			assistant.clear(); // sometimes doesn't work without this
+
 			message = "Extract all employees of companies in the city of 'Raleigh' whose salary is at least 100000.";
 			final List<Employee> employees = assistant.createAiQuery( message, session, Employee.class ).getResultList();
 

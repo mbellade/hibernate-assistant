@@ -63,4 +63,11 @@ public interface HibernateAssistant {
 	 * @return a natural language response based on the results of the query
 	 */
 	String executeQuery(AiQuery<?> query, Session session);
+
+	/**
+	 * Reset the assistant's current chat context. This can be helpful when
+	 * creating a new {@link AiQuery} that should not rely on the context
+	 * of previous requests.
+	 */
+	void clear();
 }

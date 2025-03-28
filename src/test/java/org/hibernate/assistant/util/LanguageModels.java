@@ -24,7 +24,7 @@ public class LanguageModels {
 	public static final String CODELLAMA_13B_INSTRUCT = "codellama:13b-instruct";
 	public static final String DEEPSEEK_R1_8B = "codellama:13b-instruct"; // distilled llama 8.03B
 	public static final String DEEPSEEK_R1_14B = "codellama:13b-instruct"; // distilled qwen2 14.8B
-	public static final String GPT_4O_MINI = "gpt-4o-mini"; // distilled qwen2 14.8B
+	public static final String GPT_4O_MINI = "gpt-4o-mini";
 
 	public static ChatLanguageModel testChatLanguageModel() {
 		final String modelType = System.getProperty( "hibernate.assistant.model-type" );
