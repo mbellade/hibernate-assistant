@@ -13,13 +13,20 @@ public class Employee {
 
 	private String lastName;
 
-
 	private float salary;
 
 	@ManyToOne
 	private Company company;
 
 	public Employee() {
+	}
+
+	public Employee(Long id, String firstName, String lastName, float salary, Company company) {
+		this.id = id;
+		this.firstName = firstName;
+		this.lastName = lastName;
+		this.salary = salary;
+		this.company = company;
 	}
 
 	public Long getId() {

@@ -78,7 +78,8 @@ public class SimpleTest {
 			assistant.clear(); // sometimes doesn't work without this
 
 			message = "Extract all employees of companies in the city of 'Raleigh' whose salary is at least 100000.";
-			final List<Employee> employees = assistant.createAiQuery( message, session, Employee.class ).getResultList();
+			final List<Employee> employees = assistant.createAiQuery( message, session, Employee.class )
+					.getResultList();
 
 			System.out.println( "Employees : " + employees.size() );
 			employees.forEach( employee -> System.out.println( "First name: " + employee.getFirstName() ) );
@@ -116,10 +117,16 @@ public class SimpleTest {
 	@BeforeAll
 	public void createData(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			session.persist( new Company( 1L, "Red Hat", new Address( "Milan", "Via Gustavo Fara" ) ) );
-			session.persist( new Company( 2L, "IBM", new Address( "Segrate", "Circonvallazione Idroscalo" ) ) );
+			final Company rh = new Company( 1L, "Red Hat", new Address( "Milan", "Via Gustavo Fara" ) );
+			session.persist( rh );
+			final Company ibm = new Company( 2L, "IBM", new Address( "Segrate", "Circonvallazione Idroscalo" ) );
+			session.persist( ibm );
 			session.persist( new Company( 3L, "Belladelli Giovanni", new Address( "Pegognaga", "Via Roma" ) ) );
 			session.persist( new Company( 4L, "Another Company", null ) );
+
+			session.persist( new Employee( 1L, "Marco", "Belladelli", 100_000, rh ) );
+			session.persist( new Employee( 2L, "Matteo", "Cauzzi", 50_000, rh ) );
+			session.persist( new Employee( 3L, "Andrea", "Boriero", 200_000, ibm ) );
 		} );
 	}
 
