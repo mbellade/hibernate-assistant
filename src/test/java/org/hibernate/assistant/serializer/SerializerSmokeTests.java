@@ -1,5 +1,6 @@
 package org.hibernate.assistant.serializer;
 
+import org.hibernate.Session;
 import org.hibernate.assistant.AiQuery;
 import org.hibernate.assistant.domain.Address;
 import org.hibernate.assistant.domain.Company;
@@ -48,7 +49,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testEmbeddedResult(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Address> q = AiQuery.from(
+			final AiQuery<Address> q = aiQuery(
 					"select address from Company where id = 1",
 					Address.class,
 					session
@@ -57,7 +58,7 @@ public class SerializerSmokeTests {
 			try {
 				final String result = serializer.serializeToString( q.getResultList(), q );
 
-				final JsonNode jsonNode = mapper.readTree( result );
+				final JsonNode jsonNode = getFirstValue( mapper.readTree( result ) );
 				assertThat( jsonNode.get( "city" ).textValue() ).isEqualTo( "Milan" );
 				assertThat( jsonNode.get( "street" ).textValue() ).isEqualTo( "Via Gustavo Fara" );
 			}
@@ -70,7 +71,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testEmbeddedSubPartResult(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<String> q = AiQuery.from(
+			final AiQuery<String> q = aiQuery(
 					"select address.city from Company where id = 1",
 					String.class,
 					session
@@ -79,7 +80,7 @@ public class SerializerSmokeTests {
 			try {
 				final String result = serializer.serializeToString( q.getResultList(), q );
 
-				final JsonNode jsonNode = mapper.readTree( result );
+				final JsonNode jsonNode = getFirstValue( mapper.readTree( result ) );
 				assertThat( jsonNode.textValue() ).isEqualTo( "Milan" );
 			}
 			catch (JsonProcessingException e) {
@@ -91,7 +92,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testNumericFunction(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Long> q = AiQuery.from(
+			final AiQuery<Long> q = aiQuery(
 					"select max(id) from Company",
 					Long.class,
 					session
@@ -100,7 +101,7 @@ public class SerializerSmokeTests {
 			try {
 				final String result = serializer.serializeToString( q.getResultList(), q );
 
-				final JsonNode jsonNode = mapper.readTree( result );
+				final JsonNode jsonNode = getFirstValue( mapper.readTree( result ) );
 				assertThat( jsonNode.intValue() ).isEqualTo( 4 );
 			}
 			catch (JsonProcessingException e) {
@@ -112,15 +113,15 @@ public class SerializerSmokeTests {
 	@Test
 	public void testCompany(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Company> q = AiQuery.from( "from Company where id = 1", Company.class, session );
+			final AiQuery<Company> q = aiQuery( "from Company where id = 1", Company.class, session );
 
 			try {
 				final String result = serializer.serializeToString( q.getResultList(), q );
 
-				final JsonNode jsonNode = mapper.readTree( result );
+				final JsonNode jsonNode = getFirstValue( mapper.readTree( result ) );
 				assertThat( jsonNode.get( "id" ).intValue() ).isEqualTo( 1 );
 				assertThat( jsonNode.get( "name" ).textValue() ).isEqualTo( "Red Hat" );
-				assertThat( jsonNode.get( "exployees" ).textValue() ).isEqualTo( "<uninitialized>" );
+				assertThat( jsonNode.get( "employees" ).textValue() ).isEqualTo( "<uninitialized>" );
 
 				final JsonNode address = jsonNode.get( "address" );
 				assertThat( address.get( "city" ).textValue() ).isEqualTo( "Milan" );
@@ -135,7 +136,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testCompanyFetchEmployees(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Company> q = AiQuery.from(
+			final AiQuery<Company> q = aiQuery(
 					"from Company c join fetch c.employees where c.id = 1",
 					Company.class,
 					session
@@ -144,7 +145,7 @@ public class SerializerSmokeTests {
 			try {
 				final String result = serializer.serializeToString( q.getResultList(), q );
 
-				final JsonNode jsonNode = mapper.readTree( result );
+				final JsonNode jsonNode = getFirstValue( mapper.readTree( result ) );
 				assertThat( jsonNode.get( "id" ).intValue() ).isEqualTo( 1 );
 				assertThat( jsonNode.get( "name" ).textValue() ).isEqualTo( "Red Hat" );
 
@@ -160,5 +161,14 @@ public class SerializerSmokeTests {
 				fail( "Serialization failed with exception", e );
 			}
 		} );
+	}
+
+	private <T> AiQuery<T> aiQuery(String hql, Class<T> resultType, Session session) {
+		return AiQuery.from( hql, resultType, null, session );
+	}
+
+	private JsonNode getFirstValue(JsonNode jsonNode) {
+		assertThat( jsonNode.isArray() ).isTrue();
+		return jsonNode.get( 0 );
 	}
 }

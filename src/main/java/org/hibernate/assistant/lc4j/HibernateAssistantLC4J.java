@@ -201,7 +201,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 
 		log.debugf( "Extracted HQL: %s", hql );
 
-		return AiQuery.from( hql, resultType, session );
+		return AiQuery.from( hql, resultType, message, session );
 	}
 
 	private static String extractHql(ChatResponse chatResponse, boolean structuredJson) {
