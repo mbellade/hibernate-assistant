@@ -4,7 +4,6 @@ import org.hibernate.assistant.AiQuery;
 import org.hibernate.dialect.JsonHelper;
 import org.hibernate.dialect.JsonHelper.JsonAppender;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
-import org.hibernate.internal.util.collections.IdentitySet;
 import org.hibernate.metamodel.mapping.AttributeMapping;
 import org.hibernate.metamodel.mapping.internal.EmbeddedAttributeMapping;
 import org.hibernate.persister.entity.EntityPersister;
@@ -17,22 +16,12 @@ import org.hibernate.query.sqm.tree.select.SqmJpaCompoundSelection;
 import org.hibernate.query.sqm.tree.select.SqmSelectStatement;
 import org.hibernate.query.sqm.tree.select.SqmSelection;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.persistence.Tuple;
 import jakarta.persistence.criteria.Selection;
 import java.util.List;
-import java.util.Map;
 
 public class HibernateSerializer {
-	private final SessionFactoryImplementor factory;
-
-	private Map<String, IdentitySet<Object>> circularityTracker;
-
-	public HibernateSerializer(SessionFactoryImplementor factory) {
-		this.factory = factory;
-	}
-
-	public String serializeToString(List<?> resultList, AiQuery<?> query) throws JsonProcessingException {
+	public static String serializeToString(List<?> resultList, AiQuery<?> query, SessionFactoryImplementor factory) {
 		if ( resultList.isEmpty() ) {
 			return "[]";
 		}
@@ -49,11 +38,11 @@ public class HibernateSerializer {
 		return sb.toString();
 	}
 
-	private void renderValue(
+	private static void renderValue(
 			Object value,
 			AiQuery<?> query,
 			JsonAppender jsonAppender,
-			SessionFactoryImplementor factory) throws JsonProcessingException {
+			SessionFactoryImplementor factory) {
 		final SqmSelectStatement<?> sqm = query.getSqmStatement();
 		final List<SqmSelection<?>> selections = sqm.getQuerySpec().getSelectClause().getSelections();
 		assert !selections.isEmpty();
@@ -72,11 +61,11 @@ public class HibernateSerializer {
 		}
 	}
 
-	private void renderValue(
+	private static void renderValue(
 			Object value,
 			Selection<?> selection,
 			JsonAppender jsonAppender,
-			SessionFactoryImplementor factory) throws JsonProcessingException {
+			SessionFactoryImplementor factory) {
 		switch ( selection ) {
 			case SqmRoot<?> root -> {
 				final EntityPersister persister = factory.getMappingMetamodel()
@@ -124,16 +113,18 @@ public class HibernateSerializer {
 				jsonAppender.append( ']' );
 			}
 			case SqmExpressibleAccessor<?> node -> jsonAppender.append( expressibleToString( node, value ) );
-			case null, default -> jsonAppender.append( value.toString() ); // best effort
+			case null, default -> jsonAppender.append( "\"" ).append( value.toString() ).append( "\"" ); // best effort
 		}
 	}
 
 	private static String expressibleToString(SqmExpressibleAccessor<?> node, Object value) {
 		//noinspection unchecked
 		final SqmExpressible<Object> expressible = (SqmExpressible<Object>) node.getExpressible();
-		return expressible != null ?
+		final String result = expressible != null ?
 				expressible.getExpressibleJavaType().toString( value ) :
 				value.toString(); // best effort
+		// avoid quoting numbers as they can be represented in JSON
+		return value instanceof Number ? result : "\"" + result + "\"";
 	}
 
 	private static Object getValue(Object value, int index) {

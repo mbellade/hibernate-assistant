@@ -1,13 +1,9 @@
 package org.hibernate.assistant.internal;
 
-import java.util.List;
 import java.util.Set;
 
-import org.hibernate.assistant.AiQuery;
-import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.metamodel.model.domain.ManagedDomainType;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EmbeddableType;
 import jakarta.persistence.metamodel.EntityType;
@@ -97,22 +93,5 @@ public class AssistantUtils {
 			sb.append( "\"\n" );
 		}
 		return sb.toString();
-	}
-
-	/**
-	 * Tries to get a meaningful String representation of the result of an HQL query.
-	 * We use {@link HibernateSerializer} for entities, this allows us to handle associations
-	 * cleanly, but it doesn't print the whole object tree - that would pose a problem
-	 * of circularity, so we'll have to explore options to handle that.
-	 */
-	public static String serializeToString(List<?> resultList, AiQuery<?> query, SessionFactoryImplementor factory) {
-		// This is the result type determined from the HQL interpretation
-		try {
-			return new HibernateSerializer( factory ).serializeToString( resultList, query );
-		}
-		catch (JsonProcessingException e) {
-			// todo : better error message
-			throw new RuntimeException( e );
-		}
 	}
 }

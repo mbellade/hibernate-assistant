@@ -37,7 +37,7 @@ import static dev.langchain4j.internal.Utils.getOrDefault;
 import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
 import static dev.langchain4j.model.chat.request.ResponseFormatType.JSON;
 import static org.hibernate.assistant.internal.AssistantUtils.getDomainModelPrompt;
-import static org.hibernate.assistant.internal.AssistantUtils.serializeToString;
+import static org.hibernate.assistant.internal.HibernateSerializer.serializeToString;
 import static org.hibernate.assistant.lc4j.HibernateContentRetriever.INJECTOR_PROMPT_TEMPLATE;
 
 /**
