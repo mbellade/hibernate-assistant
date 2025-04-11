@@ -4,13 +4,15 @@ import org.hibernate.assistant.AiQuery;
 import org.hibernate.dialect.JsonHelper;
 import org.hibernate.dialect.JsonHelper.JsonAppender;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
-import org.hibernate.metamodel.mapping.AttributeMapping;
-import org.hibernate.metamodel.mapping.internal.EmbeddedAttributeMapping;
+import org.hibernate.metamodel.mapping.CollectionPart;
+import org.hibernate.metamodel.mapping.EmbeddableValuedModelPart;
+import org.hibernate.metamodel.mapping.EntityValuedModelPart;
+import org.hibernate.metamodel.mapping.PluralAttributeMapping;
+import org.hibernate.metamodel.mapping.ValuedModelPart;
 import org.hibernate.persister.entity.EntityPersister;
 import org.hibernate.query.sqm.SqmExpressible;
 import org.hibernate.query.sqm.tree.SqmExpressibleAccessor;
 import org.hibernate.query.sqm.tree.domain.SqmPath;
-import org.hibernate.query.sqm.tree.from.SqmEntityJoin;
 import org.hibernate.query.sqm.tree.from.SqmRoot;
 import org.hibernate.query.sqm.tree.select.SqmJpaCompoundSelection;
 import org.hibernate.query.sqm.tree.select.SqmSelectStatement;
@@ -19,6 +21,8 @@ import org.hibernate.query.sqm.tree.select.SqmSelection;
 import jakarta.persistence.Tuple;
 import jakarta.persistence.criteria.Selection;
 import java.util.List;
+
+import static org.hibernate.internal.util.NullnessUtil.castNonNull;
 
 public class HibernateSerializer {
 	public static String serializeToString(List<?> resultList, AiQuery<?> query, SessionFactoryImplementor factory) {
@@ -79,17 +83,18 @@ public class HibernateSerializer {
 			}
 			case SqmPath<?> path -> {
 				// extract the attribute from the path
-				final AttributeMapping attributeMapping = getAttributeMapping(
+				final ValuedModelPart subPart = getSubPart(
 						path.getLhs(),
 						path.getNavigablePath().getLocalName(),
 						factory
 				);
-				if ( attributeMapping != null ) {
+				if ( subPart != null ) {
 					JsonHelper.toString(
 							value,
-							attributeMapping.getMappedType(),
+							subPart,
 							factory.getWrapperOptions(),
-							jsonAppender
+							jsonAppender,
+							null
 					);
 				}
 				else {
@@ -142,38 +147,37 @@ public class HibernateSerializer {
 		}
 	}
 
-	private static AttributeMapping getAttributeMapping(
+	private static ValuedModelPart getSubPart(
 			SqmPath<?> path,
 			String propertyName,
 			SessionFactoryImplementor factory) {
 		if ( path instanceof SqmRoot<?> root ) {
-			return getAttributeMapping( root.getEntityName(), propertyName, factory );
-		}
-		else if ( path instanceof SqmEntityJoin<?, ?> join ) {
-			return getAttributeMapping( join.getEntityName(), propertyName, factory );
+			final EntityPersister entityDescriptor = factory.getMappingMetamodel()
+					.getEntityDescriptor( root.getEntityName() );
+			return entityDescriptor.findAttributeMapping( propertyName );
 		}
 		else {
-			// must be an embedded
-			final AttributeMapping attributeMapping = getAttributeMapping(
+			// try to derive the subpart from the lhs
+			final ValuedModelPart subPart = getSubPart(
 					path.getLhs(),
 					path.getNavigablePath().getLocalName(),
 					factory
 			);
-			final EmbeddedAttributeMapping embedded = attributeMapping != null ?
-					attributeMapping.asEmbeddedAttributeMapping() :
-					null;
-			if ( embedded != null ) {
-				return embedded.getEmbeddableTypeDescriptor().findAttributeMapping( propertyName );
+			if ( subPart instanceof EmbeddableValuedModelPart embeddable ) {
+				return embeddable.getEmbeddableTypeDescriptor().findAttributeMapping( propertyName );
+			}
+			else if ( subPart instanceof EntityValuedModelPart entity ) {
+				return entity.getEntityMappingType().findAttributeMapping( propertyName );
+			}
+			else if ( subPart instanceof PluralAttributeMapping plural ) {
+				final CollectionPart.Nature nature = castNonNull( CollectionPart.Nature.fromNameExact( propertyName ) );
+				return switch ( nature ) {
+					case ELEMENT -> plural.getElementDescriptor();
+					case ID -> plural.getIdentifierDescriptor();
+					case INDEX -> plural.getIndexDescriptor();
+				};
 			}
 		}
 		return null;
-	}
-
-	private static AttributeMapping getAttributeMapping(
-			String entityName,
-			String propertyName,
-			SessionFactoryImplementor factory) {
-		final EntityPersister entityDescriptor = factory.getMappingMetamodel().getEntityDescriptor( entityName );
-		return entityDescriptor.findAttributeMapping( propertyName );
 	}
 }

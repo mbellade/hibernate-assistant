@@ -196,6 +196,65 @@ public class SerializerSmokeTests {
 		} );
 	}
 
+	@Test
+	public void testSelectCollection(SessionFactoryScope scope) {
+		scope.inTransaction( session -> {
+			final AiQuery<Employee> q = aiQuery(
+					"select c.employees from Company c where c.id = 1",
+					Employee.class,
+					session
+			);
+
+			try {
+				final String result = serializeToString( q.getResultList(), q, scope.getSessionFactory() );
+				System.out.println(result);
+
+				final JsonNode jsonNode = mapper.readTree( result );
+				assertThat( jsonNode.isArray() ).isTrue();
+				assertThat( jsonNode.size() ).isEqualTo( 2 );
+
+				final JsonNode first = jsonNode.get( 0 );
+				assertThat( first.isObject() ).isTrue();
+				assertThat( first.get( "id" ).isIntegralNumber() ).isTrue();
+				assertThat( first.get( "company" ).get( "name" ).textValue() ).isEqualTo( "Red Hat" );
+
+				final JsonNode second = jsonNode.get( 1 );
+				assertThat( second.isObject() ).isTrue();
+				assertThat( second.get( "id" ).isIntegralNumber() ).isTrue();
+				assertThat( second.get( "company" ).get( "name" ).textValue() ).isEqualTo( "Red Hat" );
+			}
+			catch (JsonProcessingException e) {
+				fail( "Serialization failed with exception", e );
+			}
+		} );
+	}
+
+	@Test
+	public void testSelectCollectionProperty(SessionFactoryScope scope) {
+		scope.inTransaction( session -> {
+			final AiQuery<String> q = aiQuery(
+					"select element(c.employees).firstName from Company c where c.id = 1",
+					String.class,
+					session
+			);
+
+			try {
+				final String result = serializeToString( q.getResultList(), q, scope.getSessionFactory() );
+				System.out.println(result);
+
+				final JsonNode jsonNode = mapper.readTree( result );
+				assertThat( jsonNode.isArray() ).isTrue();
+				assertThat( jsonNode.size() ).isEqualTo( 2 );
+				assertThat( Set.of( jsonNode.get( 0 ).textValue(), jsonNode.get( 1 ).textValue() ) ).containsOnly(
+						"Marco",
+						"Matteo"
+				);
+			}
+			catch (JsonProcessingException e) {
+				fail( "Serialization failed with exception", e );
+			}
+		} );
+	}
 
 	@Test
 	public void testComplexInheritance(SessionFactoryScope scope) {
