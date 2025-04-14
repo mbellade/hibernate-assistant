@@ -1,15 +1,14 @@
 package org.hibernate.assistant.util;
 
-import java.util.Locale;
-
 import org.hibernate.assistant.HibernateAssistant;
-import org.hibernate.assistant.lc4j.HibernateAssistantLC4J;
+import org.hibernate.assistant.internal.lc4j.HibernateAssistantLC4J;
 
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import jakarta.persistence.metamodel.Metamodel;
+import java.util.Locale;
 
 import static dev.langchain4j.model.chat.Capability.RESPONSE_FORMAT_JSON_SCHEMA;
 

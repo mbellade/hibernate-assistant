@@ -1,11 +1,10 @@
 package org.hibernate.assistant;
 
-import java.util.List;
-
 import org.hibernate.assistant.domain.Address;
 import org.hibernate.assistant.domain.Company;
 import org.hibernate.assistant.domain.Employee;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
+import org.hibernate.query.SelectionQuery;
 
 import org.hibernate.testing.orm.junit.DomainModel;
 import org.hibernate.testing.orm.junit.SessionFactory;
@@ -13,6 +12,8 @@ import org.hibernate.testing.orm.junit.SessionFactoryScope;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.hibernate.assistant.util.LanguageModels.testAssistant;
 
@@ -54,10 +55,9 @@ public class SimpleTest {
 			final HibernateAssistant assistant = testAssistant( session.getMetamodel() );
 
 			final String message = "Extract the address from companies. The address must have a street starting with 'Via'.";
-			final AiQuery<Address> aiQuery = assistant.createAiQuery( message, session, Address.class );
+			final SelectionQuery<Address> aiQuery = assistant.createAiQuery( message, session, Address.class );
 
-
-			final List<Address> addresses = session.createQuery( aiQuery.getHql(), Address.class ).getResultList();
+			final List<Address> addresses = aiQuery.getResultList();
 
 			System.out.println( "Addresses : " + addresses.size() );
 			addresses.forEach( address -> System.out.println( "Street: " + address.getStreet() ) );
@@ -93,7 +93,7 @@ public class SimpleTest {
 			final HibernateAssistant assistant = testAssistant( session.getMetamodel() );
 
 			final String message = "How many companies do not have an address?";
-			final AiQuery<Company> aiQuery = assistant.createAiQuery( message, session, Company.class );
+			final SelectionQuery<Company> aiQuery = assistant.createAiQuery( message, session, Company.class );
 
 			final String naturalLanguageResult = assistant.executeQuery( aiQuery, session );
 

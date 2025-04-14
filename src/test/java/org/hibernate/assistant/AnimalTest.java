@@ -1,8 +1,5 @@
 package org.hibernate.assistant;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.hibernate.testing.orm.domain.StandardDomainModel;
 import org.hibernate.testing.orm.domain.animal.Cat;
 import org.hibernate.testing.orm.domain.animal.Dog;
@@ -15,6 +12,9 @@ import org.hibernate.testing.orm.junit.SessionFactoryScope;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.hibernate.assistant.util.LanguageModels.testAssistant;
 

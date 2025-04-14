@@ -1,6 +1,5 @@
-package org.hibernate.assistant.internal;
+package org.hibernate.assistant.spi;
 
-import org.hibernate.assistant.AiQuery;
 import org.hibernate.dialect.JsonHelper;
 import org.hibernate.dialect.JsonHelper.JsonAppender;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
@@ -10,8 +9,11 @@ import org.hibernate.metamodel.mapping.EntityValuedModelPart;
 import org.hibernate.metamodel.mapping.PluralAttributeMapping;
 import org.hibernate.metamodel.mapping.ValuedModelPart;
 import org.hibernate.persister.entity.EntityPersister;
+import org.hibernate.query.SelectionQuery;
 import org.hibernate.query.sqm.SqmExpressible;
+import org.hibernate.query.sqm.SqmSelectionQuery;
 import org.hibernate.query.sqm.tree.SqmExpressibleAccessor;
+import org.hibernate.query.sqm.tree.SqmStatement;
 import org.hibernate.query.sqm.tree.domain.SqmPath;
 import org.hibernate.query.sqm.tree.from.SqmRoot;
 import org.hibernate.query.sqm.tree.select.SqmJpaCompoundSelection;
@@ -24,8 +26,11 @@ import java.util.List;
 
 import static org.hibernate.internal.util.NullnessUtil.castNonNull;
 
-public class HibernateSerializer {
-	public static String serializeToString(List<?> resultList, AiQuery<?> query, SessionFactoryImplementor factory) {
+public class QuerySerializer {
+	public static String serializeToString(
+			List<?> resultList,
+			SelectionQuery<?> query,
+			SessionFactoryImplementor factory) {
 		if ( resultList.isEmpty() ) {
 			return "[]";
 		}
@@ -35,7 +40,7 @@ public class HibernateSerializer {
 		char separator = '[';
 		for ( final Object value : resultList ) {
 			sb.append( separator );
-			renderValue( value, query, jsonAppender, factory );
+			renderValue( value, (SqmSelectionQuery<?>) query, jsonAppender, factory );
 			separator = ',';
 		}
 		sb.append( ']' );
@@ -44,11 +49,14 @@ public class HibernateSerializer {
 
 	private static void renderValue(
 			Object value,
-			AiQuery<?> query,
+			SqmSelectionQuery<?> query,
 			JsonAppender jsonAppender,
 			SessionFactoryImplementor factory) {
-		final SqmSelectStatement<?> sqm = query.getSqmStatement();
-		final List<SqmSelection<?>> selections = sqm.getQuerySpec().getSelectClause().getSelections();
+		final SqmStatement<?> sqm = query.getSqmStatement();
+		if ( !( sqm instanceof SqmSelectStatement<?> sqmSelect ) ) {
+			throw new IllegalArgumentException( "Query is not a select statement." );
+		}
+		final List<SqmSelection<?>> selections = sqmSelect.getQuerySpec().getSelectClause().getSelections();
 		assert !selections.isEmpty();
 		if ( selections.size() == 1 ) {
 			renderValue( value, selections.getFirst().getSelectableNode(), jsonAppender, factory );

@@ -2,10 +2,11 @@ package org.hibernate.assistant.serializer;
 
 import org.hibernate.Hibernate;
 import org.hibernate.Session;
-import org.hibernate.assistant.AiQuery;
 import org.hibernate.assistant.domain.Address;
 import org.hibernate.assistant.domain.Company;
 import org.hibernate.assistant.domain.Employee;
+import org.hibernate.engine.spi.SharedSessionContractImplementor;
+import org.hibernate.query.SelectionQuery;
 
 import org.hibernate.testing.orm.domain.StandardDomainModel;
 import org.hibernate.testing.orm.domain.animal.Cat;
@@ -27,7 +28,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hibernate.assistant.internal.HibernateSerializer.serializeToString;
+import static org.hibernate.assistant.spi.QuerySerializer.serializeToString;
 import static org.junit.jupiter.api.Assertions.fail;
 
 @DomainModel(annotatedClasses = {
@@ -59,9 +60,9 @@ public class SerializerSmokeTests {
 	}
 
 	@Test
-	public void testEmbeddedResult(SessionFactoryScope scope) {
+	public void testEmbedded(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Address> q = aiQuery(
+			final SelectionQuery<Address> q = aiQuery(
 					"select address from Company where id = 1",
 					Address.class,
 					session
@@ -81,9 +82,9 @@ public class SerializerSmokeTests {
 	}
 
 	@Test
-	public void testEmbeddedSubPartResult(SessionFactoryScope scope) {
+	public void testEmbeddedSubPart(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<String> q = aiQuery(
+			final SelectionQuery<String> q = aiQuery(
 					"select address.city from Company where id = 1",
 					String.class,
 					session
@@ -104,7 +105,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testNumericFunction(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Long> q = aiQuery(
+			final SelectionQuery<Long> q = aiQuery(
 					"select max(id) from Company",
 					Long.class,
 					session
@@ -125,7 +126,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testStringyFunction(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<String> q = aiQuery(
+			final SelectionQuery<String> q = aiQuery(
 					"select upper(name) from Company where id = 1",
 					String.class,
 					session
@@ -146,7 +147,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testCompany(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Company> q = aiQuery( "from Company where id = 1", Company.class, session );
+			final SelectionQuery<Company> q = aiQuery( "from Company where id = 1", Company.class, session );
 
 			try {
 				final String result = serializeToString( q.getResultList(), q, scope.getSessionFactory() );
@@ -169,7 +170,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testCompanyFetchEmployees(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Company> q = aiQuery(
+			final SelectionQuery<Company> q = aiQuery(
 					"from Company c join fetch c.employees where c.id = 1",
 					Company.class,
 					session
@@ -199,7 +200,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testSelectCollection(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Employee> q = aiQuery(
+			final SelectionQuery<Employee> q = aiQuery(
 					"select c.employees from Company c where c.id = 1",
 					Employee.class,
 					session
@@ -232,7 +233,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testSelectCollectionProperty(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<String> q = aiQuery(
+			final SelectionQuery<String> q = aiQuery(
 					"select element(c.employees).firstName from Company c where c.id = 1",
 					String.class,
 					session
@@ -259,7 +260,7 @@ public class SerializerSmokeTests {
 	@Test
 	public void testComplexInheritance(SessionFactoryScope scope) {
 		scope.inTransaction( session -> {
-			final AiQuery<Human> q = aiQuery(
+			final SelectionQuery<Human> q = aiQuery(
 					"from Human h where h.id = 1",
 					Human.class,
 					session
@@ -308,8 +309,8 @@ public class SerializerSmokeTests {
 		} );
 	}
 
-	private <T> AiQuery<T> aiQuery(String hql, Class<T> resultType, Session session) {
-		return AiQuery.from( hql, resultType, null, session );
+	private <T> SelectionQuery<T> aiQuery(String hql, Class<T> resultType, SharedSessionContractImplementor session) {
+		return session.createSelectionQuery( hql, resultType );
 	}
 
 	private JsonNode getSingleValue(JsonNode jsonNode) {

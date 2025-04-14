@@ -1,11 +1,10 @@
-package org.hibernate.assistant.lc4j;
-
-import java.util.List;
+package org.hibernate.assistant.internal.lc4j;
 
 import org.hibernate.SessionFactory;
-import org.hibernate.assistant.AiQuery;
 import org.hibernate.assistant.HibernateAssistant;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
+import org.hibernate.query.SelectionQuery;
+import org.hibernate.query.spi.SqmQuery;
 
 import org.jboss.logging.Logger;
 
@@ -15,6 +14,7 @@ import dev.langchain4j.model.input.PromptTemplate;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.query.Query;
+import java.util.List;
 
 import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
 import static java.util.Collections.emptyList;
@@ -120,13 +120,13 @@ public class HibernateContentRetriever implements ContentRetriever {
 //			attemptsLeft--;
 
 		final String result = sessionFactory.fromSession( session -> {
-			final AiQuery<?> aiQuery = assistant.createAiQuery( naturalLanguageQuery.text(), session );
+			final SelectionQuery<?> aiQuery = assistant.createAiQuery( naturalLanguageQuery.text(), session );
 
 			try {
-				return assistant.executeQueryToString( aiQuery, session );
+				return assistant.executeQuery( aiQuery, session );
 			}
 			catch (Exception e) {
-				log.errorf( e, "Error executing query, hql: %s", aiQuery.getHql() );
+				log.errorf( e, "Error executing query, hql: %s", ( (SqmQuery) aiQuery ).getQueryString() );
 				return null;
 			}
 		} );

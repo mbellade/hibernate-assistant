@@ -1,16 +1,12 @@
-package org.hibernate.assistant.lc4j;
+package org.hibernate.assistant.internal.lc4j;
 
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import org.hibernate.Session;
 import org.hibernate.SessionFactory;
-import org.hibernate.assistant.AiQuery;
+import org.hibernate.SharedSessionContract;
 import org.hibernate.assistant.HibernateAssistant;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.metamodel.model.domain.JpaMetamodel;
 import org.hibernate.metamodel.model.domain.ManagedDomainType;
+import org.hibernate.query.SelectionQuery;
 
 import org.jboss.logging.Logger;
 
@@ -32,13 +28,16 @@ import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.rag.content.injector.DefaultContentInjector;
 import jakarta.persistence.metamodel.Metamodel;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static dev.langchain4j.internal.Utils.getOrDefault;
 import static dev.langchain4j.internal.ValidationUtils.ensureNotNull;
 import static dev.langchain4j.model.chat.request.ResponseFormatType.JSON;
 import static org.hibernate.assistant.internal.AssistantUtils.getDomainModelPrompt;
-import static org.hibernate.assistant.internal.HibernateSerializer.serializeToString;
-import static org.hibernate.assistant.lc4j.HibernateContentRetriever.INJECTOR_PROMPT_TEMPLATE;
+import static org.hibernate.assistant.spi.QuerySerializer.serializeToString;
+import static org.hibernate.assistant.internal.lc4j.HibernateContentRetriever.INJECTOR_PROMPT_TEMPLATE;
 
 /**
  * Implementation of {@link HibernateAssistant} based on <a href="https://docs.langchain4j.dev/">LangChain4j</a> APIs.
@@ -167,7 +166,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 	}
 
 	private static SystemMessage getMetamodelPrompt(PromptTemplate metamodelPromptTemplate, Metamodel metamodel) {
-		return metamodelPromptTemplate.apply( getDomainModelPrompt( metamodel ) ).toSystemMessage();
+		return metamodelPromptTemplate.apply( getDomainModelPrompt( metamodel, '"' ) ).toSystemMessage();
 	}
 
 	@Override
@@ -177,7 +176,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 	}
 
 	@Override
-	public <T> AiQuery<T> createAiQuery(String message, Session session, Class<T> resultType) {
+	public <T> SelectionQuery<T> createAiQuery(String message, SharedSessionContract session, Class<T> resultType) {
 		final ManagedDomainType<T> managedType = resultType != null && resultType != Object.class && !resultType.isInterface() ?
 				metamodel.findManagedType( resultType ) :
 				null;
@@ -201,7 +200,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 
 		log.debugf( "Extracted HQL: %s", hql );
 
-		return AiQuery.from( hql, resultType, message, session );
+		return session.createSelectionQuery( hql, resultType );
 	}
 
 	private static String extractHql(ChatResponse chatResponse, boolean structuredJson) {
@@ -278,7 +277,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 	 * representation of the query results.
 	 */
 	@Override
-	public String executeQuery(AiQuery<?> query, Session session) {
+	public String executeQuery(SelectionQuery<?> query, SharedSessionContract session) {
 		final String result = executeQueryToString( query, session );
 
 		final String prompt = "The query returned the following data:\n" + result +
@@ -299,23 +298,23 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 	}
 
 	/**
-	 * Executes the given {@link AiQuery} as a {@link org.hibernate.query.SelectionQuery}, and provides
+	 * Executes the given {@link SelectionQuery} as a {@link org.hibernate.query.SelectionQuery}, and provides
 	 * a string representation of the response. The string will be created based on Hibernate's
 	 * knowledge of the domain model, but it will not print the entire object tree since that
 	 * would cause circularity problems. This is a best-effort attempt at providing a useful
 	 * string-representation based on data, mainly used to pass it back to a {@link ChatLanguageModel}
-	 * like in {@link #executeQuery(AiQuery, Session)}.
+	 * like in {@link #executeQuery(SelectionQuery, SharedSessionContract)}.
 	 * <p>
 	 * If you wish to execute the query manually and obtain the structured results yourself,
-	 * you should use {@link AiQuery}'s direct execution methods, e.g. {@link AiQuery#getResultList()}
-	 * or {@link AiQuery#getSingleResult()}.
+	 * you should use {@link SelectionQuery}'s direct execution methods, e.g. {@link SelectionQuery#getResultList()}
+	 * or {@link SelectionQuery#getSingleResult()}.
 	 *
 	 * @param query the AI query to execute
 	 * @param session the session in which to execute the query
 	 *
 	 * @return a natural language response based on the results of the query
 	 */
-	public String executeQueryToString(AiQuery<?> query, Session session) {
+	public String executeQueryToString(SelectionQuery<?> query, SharedSessionContract session) {
 		final List<?> resultList = query.getResultList();
 		if ( resultList.isEmpty() ) {
 			return "The query did not return any results.";
