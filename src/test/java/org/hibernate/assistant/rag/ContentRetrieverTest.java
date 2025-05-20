@@ -14,25 +14,25 @@ import org.junit.jupiter.api.Test;
 
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.rag.content.injector.DefaultContentInjector;
 import dev.langchain4j.service.AiServices;
 
 import static org.hibernate.assistant.internal.lc4j.HibernateContentRetriever.INJECTOR_PROMPT_TEMPLATE;
-import static org.hibernate.assistant.util.LanguageModels.testChatLanguageModel;
+import static org.hibernate.assistant.util.LanguageModels.testChatModel;
 
 @SessionFactory
 @DomainModel(annotatedClasses = { Company.class, Address.class, Employee.class })
 public class ContentRetrieverTest {
-	private final ChatLanguageModel chatModel = testChatLanguageModel();
+	private final ChatModel chatModel = testChatModel();
 	private final ChatMemory chatMemory = MessageWindowChatMemory.withMaxMessages( 10 );
 
 	@Test
 	public void simpleRagTest(SessionFactoryScope scope) {
 		final HibernateContentRetriever contentRetriever = HibernateContentRetriever.builder()
-				.chatModel( testChatLanguageModel() )
+				.chatModel( testChatModel() )
 				.chatMemory( chatMemory )
 				.sessionFactory( scope.getSessionFactory() )
 				.build();
@@ -42,7 +42,7 @@ public class ContentRetrieverTest {
 				.build();
 
 		final Assistant assistant = AiServices.builder( Assistant.class )
-				.chatLanguageModel( chatModel )
+				.chatModel( chatModel )
 				.chatMemory( chatMemory )
 				.retrievalAugmentor( rag )
 				.build();

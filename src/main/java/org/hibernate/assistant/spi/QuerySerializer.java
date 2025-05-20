@@ -97,13 +97,7 @@ public class QuerySerializer {
 						factory
 				);
 				if ( subPart != null ) {
-					JsonHelper.toString(
-							value,
-							subPart,
-							factory.getWrapperOptions(),
-							jsonAppender,
-							null
-					);
+					JsonHelper.toString( value, subPart, factory.getWrapperOptions(), jsonAppender, null );
 				}
 				else {
 					jsonAppender.append( expressibleToString( path, value ) );

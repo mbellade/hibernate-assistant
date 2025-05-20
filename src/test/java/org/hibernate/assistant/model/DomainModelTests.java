@@ -20,7 +20,7 @@ public class DomainModelTests {
 				.addAnnotatedClass( Employee.class )
 				.buildMetadata();
 		try (final SessionFactory sf = metadata.buildSessionFactory()) {
-			final String result = getDomainModelPrompt( sf.getMetamodel(), '"' );
+			final String result = getDomainModelPrompt( sf.getMetamodel() );
 			System.out.println( result );
 
 			// todo : create some meaningful assertions

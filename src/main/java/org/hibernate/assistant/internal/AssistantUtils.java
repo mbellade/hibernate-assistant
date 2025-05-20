@@ -18,113 +18,106 @@ import java.util.Set;
 public class AssistantUtils {
 
 	/**
-	 * Utility method that generates a textual representation of the mapping information
+	 * Utility method that generates a JSON string representation of the mapping information
 	 * contained in the provided {@link Metamodel metamodel} instance. The representation
 	 * does not follow a strict scheme, and is more akin to natural language, as it's
 	 * mainly meant for consumption by a LLM.
 	 *
 	 * @param metamodel the metamodel instance containing information on the persistence structures
-	 * @param quote character to use for quotations, used to delimit object names from general text;
-	 * use {@code null} to disable quoting
 	 *
-	 * @return the textual representation of the provided {@link Metamodel metamodel}
+	 * @return the JSON representation of the provided {@link Metamodel metamodel}
 	 */
-	public static String getDomainModelPrompt(Metamodel metamodel, Character quote) {
-		final StringBuilder sb = new StringBuilder();
-		for ( ManagedType<?> managedType : metamodel.getManagedTypes() ) {
+	public static String getDomainModelPrompt(Metamodel metamodel) {
+		final Set<ManagedType<?>> managedTypes = metamodel.getManagedTypes();
+		if ( managedTypes.isEmpty() ) {
+			return "[]";
+		}
+
+		final StringBuilder sb = new StringBuilder( "[" );
+		for ( ManagedType<?> managedType : managedTypes ) {
 			final String typeDescription = switch ( managedType.getPersistenceType() ) {
-				case ENTITY -> getEntityTypeDescription( (EntityType<?>) managedType, quote );
-				case EMBEDDABLE -> getEmbeddableTypeDescription( (EmbeddableType<?>) managedType, quote );
-				case MAPPED_SUPERCLASS -> getMappedSuperclassTypeDescription(
-						(MappedSuperclassType<?>) managedType,
-						quote
-				);
+				case ENTITY -> getEntityTypeDescription( (EntityType<?>) managedType );
+				case EMBEDDABLE -> getEmbeddableTypeDescription( (EmbeddableType<?>) managedType );
+				case MAPPED_SUPERCLASS -> getMappedSuperclassTypeDescription( (MappedSuperclassType<?>) managedType );
 				default ->
 						throw new IllegalStateException( "Unexpected persistence type for managed type [" + managedType + "]" );
 			};
-			sb.append( typeDescription ).append( "\n" );
+			sb.append( typeDescription ).append( "," );
 		}
-		return sb.toString();
+		return sb.deleteCharAt( sb.length() - 1 ).append( ']' ).toString();
 	}
 
-	public static <T> String getEntityTypeDescription(EntityType<T> entityType, Character quote) {
-		return quote( entityType.getName(), quote ) + " is an entity type.\n"
-				+ getJavaTypeDescription( entityType, quote )
-				+ getInheritanceDescription( (ManagedDomainType<?>) entityType, quote )
-				+ getIdentifierDescription( entityType, quote )
-				+ getAttributesDescription( entityType.getAttributes(), quote );
+	public static <T> String getEntityTypeDescription(EntityType<T> entityType) {
+		return "{\"type\":\"ENTITY\"," +
+				"\"name\":\"" + entityType.getName() + "\"," +
+				"\"class\":\"" + entityType.getJavaType().getTypeName() + "\"," +
+				superclassDescriptor( (ManagedDomainType<?>) entityType ) +
+				identifierDescriptor( entityType ) +
+				"\"attributes\":" + attributeArray( entityType.getAttributes() ) +
+				"}";
 	}
 
-	private static String quote(String s, Character quote) {
-		return quote != null ? quote + s + quote : s;
-	}
-
-	public static String getJavaTypeDescription(ManagedType<?> managedType, Character quote) {
-		return "It maps to the java class " + quote( managedType.getJavaType().getTypeName(), quote ) + "\n";
-	}
-
-	public static String getInheritanceDescription(ManagedDomainType<?> managedType, Character quote) {
+	public static String superclassDescriptor(ManagedDomainType<?> managedType) {
 		final ManagedDomainType<?> superType = managedType.getSuperType();
-		return superType != null
-				? "It extends from the " + quote( superType.getJavaType().getTypeName(), quote ) + " type.\n"
-				: "";
+		return superType != null ? "\"superclass\":\"" + superType.getJavaType().getTypeName() + "\"," : "";
 	}
 
-	public static <T> String getMappedSuperclassTypeDescription(
-			MappedSuperclassType<T> mappedSuperclass,
-			Character quote) {
-		return quote( mappedSuperclass.getJavaType().getSimpleName(), quote )
-				+ " is a mapped superclass type.\n"
-				+ getJavaTypeDescription( mappedSuperclass, quote )
-				+ getInheritanceDescription( (ManagedDomainType<?>) mappedSuperclass, quote )
-				+ getIdentifierDescription( mappedSuperclass, quote )
-				+ getAttributesDescription( mappedSuperclass.getAttributes(), quote );
+	public static <T> String getMappedSuperclassTypeDescription(MappedSuperclassType<T> mappedSuperclass) {
+		final Class<T> javaType = mappedSuperclass.getJavaType();
+		return "{\"type\":\"MAPPED_SUPERCLASS\"," +
+				"\"name\":\"" + javaType.getSimpleName() + "\"," +
+				"\"class\":\"" + javaType.getTypeName() + "\"," +
+				superclassDescriptor( (ManagedDomainType<?>) mappedSuperclass ) +
+				identifierDescriptor( mappedSuperclass ) +
+				"\"attributes\":" + attributeArray( mappedSuperclass.getAttributes() ) +
+				"}";
 	}
 
-	public static <T> String getIdentifierDescription(IdentifiableType<T> identifiableType, Character quote) {
+	public static <T> String identifierDescriptor(IdentifiableType<T> identifiableType) {
 		final Type<?> idType = identifiableType.getIdType();
 		final String description;
 		if ( idType != null ) {
 			final SingularAttribute<? super T, ?> id = identifiableType.getId( idType.getJavaType() );
-			description = "Its identifier attribute is called " + quote( id.getName(), quote )
-					+ " and is of type " + quote( id.getJavaType().getTypeName(), quote ) + ".\n";
+			description = "\"identifier\":{\"name\":\"" + id.getName() + "\"," +
+					"\"type\":\"" + id.getJavaType().getTypeName() + "\"},";
 		}
 		else {
-			description = "It has no identifier attribute.\n";
+			description = "";
 		}
 		return description;
 	}
 
-	public static <T> String getEmbeddableTypeDescription(EmbeddableType<T> embeddableType, Character quote) {
-		return quote( embeddableType.getJavaType().getSimpleName(), quote ) + " is an embeddable type.\n"
-				+ getInheritanceDescription( (ManagedDomainType<?>) embeddableType, quote )
-				+ getJavaTypeDescription( embeddableType, quote )
-				+ getAttributesDescription( embeddableType.getAttributes(), quote );
+	public static <T> String getEmbeddableTypeDescription(EmbeddableType<T> embeddableType) {
+		final Class<T> javaType = embeddableType.getJavaType();
+		return "{\"type\":\"EMBEDDABLE\"," +
+				"\"name\":\"" + javaType.getSimpleName() + "\"," +
+				"\"class\":\"" + javaType.getTypeName() + "\"," +
+				superclassDescriptor( (ManagedDomainType<?>) embeddableType ) +
+				"\"attributes\":" + attributeArray( embeddableType.getAttributes() ) +
+				"}";
 	}
 
-	public static <T> String getAttributesDescription(Set<Attribute<? super T, ?>> attributes, Character quote) {
-		final StringBuilder sb = new StringBuilder( "Its attributes are (name => type):\n" );
+	public static <T> String attributeArray(Set<Attribute<? super T, ?>> attributes) {
+		if ( attributes.isEmpty() ) {
+			return "[]";
+		}
+
+		final StringBuilder sb = new StringBuilder( "[" );
 		for ( final Attribute<? super T, ?> attribute : attributes ) {
-			sb.append( "- " ).append( quote( attribute.getName(), quote ) ).append( " => " );
-			if ( quote != null ) {
-				sb.append( quote );
-			}
-			sb.append( attribute.getJavaType().getTypeName() );
+			sb.append( "{\"name\":\"" ).append( attribute.getName() )
+					.append( "\",\"type\":\"" ).append( attribute.getJavaType().getTypeName() );
 			// add key and element types for plural attributes
 			if ( attribute instanceof PluralAttribute<?, ?, ?> pluralAttribute ) {
 				sb.append( '<' );
 				final PluralAttribute.CollectionType collectionType = pluralAttribute.getCollectionType();
 				if ( collectionType == PluralAttribute.CollectionType.MAP ) {
 					sb.append( ( (MapAttribute<?, ?, ?>) pluralAttribute ).getKeyJavaType().getTypeName() )
-							.append( ", " );
+							.append( "," );
 				}
 				sb.append( pluralAttribute.getElementType().getJavaType().getTypeName() ).append( '>' );
 			}
-			if ( quote != null ) {
-				sb.append( quote );
-			}
-			sb.append( '\n' );
+			sb.append( "\"}," );
 		}
-		return sb.toString();
+		return sb.deleteCharAt( sb.length() - 1 ).append( ']' ).toString();
 	}
 }
