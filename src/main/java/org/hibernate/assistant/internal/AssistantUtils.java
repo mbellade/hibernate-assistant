@@ -13,6 +13,9 @@ import jakarta.persistence.metamodel.Metamodel;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 import jakarta.persistence.metamodel.Type;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 
 public class AssistantUtils {
@@ -28,28 +31,31 @@ public class AssistantUtils {
 	 * @return the JSON representation of the provided {@link Metamodel metamodel}
 	 */
 	public static String getDomainModelPrompt(Metamodel metamodel) {
-		final Set<ManagedType<?>> managedTypes = metamodel.getManagedTypes();
-		if ( managedTypes.isEmpty() ) {
-			return "[]";
-		}
-
-		final StringBuilder sb = new StringBuilder( "[" );
-		for ( ManagedType<?> managedType : managedTypes ) {
-			final String typeDescription = switch ( managedType.getPersistenceType() ) {
-				case ENTITY -> getEntityTypeDescription( (EntityType<?>) managedType );
-				case EMBEDDABLE -> getEmbeddableTypeDescription( (EmbeddableType<?>) managedType );
-				case MAPPED_SUPERCLASS -> getMappedSuperclassTypeDescription( (MappedSuperclassType<?>) managedType );
+		final List<String> entities = new ArrayList<>();
+		final List<String> embeddables = new ArrayList<>();
+		final List<String> mappedSupers = new ArrayList<>();
+		for ( ManagedType<?> managedType : metamodel.getManagedTypes() ) {
+			switch ( managedType.getPersistenceType() ) {
+				case ENTITY -> entities.add( getEntityTypeDescription( (EntityType<?>) managedType ) );
+				case EMBEDDABLE -> embeddables.add( getEmbeddableTypeDescription( (EmbeddableType<?>) managedType ) );
+				case MAPPED_SUPERCLASS -> mappedSupers.add( getMappedSuperclassTypeDescription( (MappedSuperclassType<?>) managedType ) );
 				default ->
 						throw new IllegalStateException( "Unexpected persistence type for managed type [" + managedType + "]" );
-			};
-			sb.append( typeDescription ).append( "," );
+			}
 		}
-		return sb.deleteCharAt( sb.length() - 1 ).append( ']' ).toString();
+		return "{" +
+				"\"entities\":" + toJsonArray( entities ) +
+				",\"mappedSuperclasses\":" + toJsonArray( mappedSupers ) +
+				",\"embeddables\":" + toJsonArray( embeddables ) +
+				'}';
+	}
+
+	static String toJsonArray(Collection<String> strings) {
+		return strings.isEmpty() ? "[]" : "[" + String.join( ",", strings ) + "]";
 	}
 
 	public static <T> String getEntityTypeDescription(EntityType<T> entityType) {
-		return "{\"type\":\"ENTITY\"," +
-				"\"name\":\"" + entityType.getName() + "\"," +
+		return "{\"name\":\"" + entityType.getName() + "\"," +
 				"\"class\":\"" + entityType.getJavaType().getTypeName() + "\"," +
 				superclassDescriptor( (ManagedDomainType<?>) entityType ) +
 				identifierDescriptor( entityType ) +
@@ -64,8 +70,7 @@ public class AssistantUtils {
 
 	public static <T> String getMappedSuperclassTypeDescription(MappedSuperclassType<T> mappedSuperclass) {
 		final Class<T> javaType = mappedSuperclass.getJavaType();
-		return "{\"type\":\"MAPPED_SUPERCLASS\"," +
-				"\"name\":\"" + javaType.getSimpleName() + "\"," +
+		return "{\"name\":\"" + javaType.getSimpleName() + "\"," +
 				"\"class\":\"" + javaType.getTypeName() + "\"," +
 				superclassDescriptor( (ManagedDomainType<?>) mappedSuperclass ) +
 				identifierDescriptor( mappedSuperclass ) +
@@ -89,8 +94,7 @@ public class AssistantUtils {
 
 	public static <T> String getEmbeddableTypeDescription(EmbeddableType<T> embeddableType) {
 		final Class<T> javaType = embeddableType.getJavaType();
-		return "{\"type\":\"EMBEDDABLE\"," +
-				"\"name\":\"" + javaType.getSimpleName() + "\"," +
+		return "{\"name\":\"" + javaType.getSimpleName() + "\"," +
 				"\"class\":\"" + javaType.getTypeName() + "\"," +
 				superclassDescriptor( (ManagedDomainType<?>) embeddableType ) +
 				"\"attributes\":" + attributeArray( embeddableType.getAttributes() ) +
