@@ -17,7 +17,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
@@ -41,11 +41,11 @@ import static org.hibernate.assistant.internal.lc4j.HibernateContentRetriever.IN
 
 /**
  * Implementation of {@link HibernateAssistant} based on <a href="https://docs.langchain4j.dev/">LangChain4j</a> APIs.
- * The user must provide a {@link ChatLanguageModel} instance that will be used to interact with the LLMs.
+ * The user must provide a {@link ChatModel} instance that will be used to interact with the LLMs.
  * Optionally, a {@link ChatMemory} can also be provided, otherwise a default {@link MessageWindowChatMemory}
  * with a maximum of {@code 10} messages will be used.
  * <p>
- * It is highly recommended to use a {@link ChatLanguageModel} that supports
+ * It is highly recommended to use a {@link ChatModel} that supports
  * <a href="https://docs.langchain4j.dev/tutorials/structured-outputs#json-schema">JSON Schema</a>
  * to improve the chances of extracting a valid HQL query from the LLM's responses. Note that this requires
  * enabling <a href="https://docs.langchain4j.dev/tutorials/structured-outputs#json-schema">JSON Schema</a>
@@ -66,12 +66,38 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 					Do not output anything else aside from a valid HQL statement!
 					""" );
 
+	private static final String METAMODEL_PROMPT_JSON_SCHEMA = """
+			{
+				"title": "MappedObject",
+				"description": "A mapped Java class that corresponds to a managed type in the domain metamodel",
+				"type": "object",
+				"properties": {
+					"type": {"type": "string", "description":"The type of persistent object","enum": ["ENTITY", "EMBEDDABLE", "MAPPED_SUPERCLASS"]},
+					"name": {"type": "string", "description":"The short name of the mapped object"},
+					"class": {"type": "string", "description":"The fully qualified class name of the mapped object"},
+					"superclass": {"type": "string", "description":"The name of the superclass the object extends from, if any"},
+					"identifier": {
+						"description":"The identifier attribute of the mapped object, if any",
+						"type": "object",
+						"properties": {
+							"name": {"type": "string","description":"The name of the identifier attribute"},
+							"type": {"type": "string","description":"The type (fully qualified class name) of the identifier attribute"},
+						}
+					},
+					"attributes": {
+						"type": "array",
+						"description": "List of attributes contained in the mapped object"
+					}
+				}
+			}
+			""";
+
 	public static Builder builder() {
 		return new Builder();
 	}
 
 	public static class Builder {
-		private ChatLanguageModel chatModel;
+		private ChatModel chatModel;
 		private ChatMemory chatMemory;
 		private Metamodel metamodel;
 		private PromptTemplate metamodelPromptTemplate;
@@ -80,7 +106,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 		private Builder() {
 		}
 
-		public Builder chatModel(ChatLanguageModel chatModel) {
+		public Builder chatModel(ChatModel chatModel) {
 			this.chatModel = chatModel;
 			return this;
 		}
@@ -133,14 +159,14 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 	//  this could be another (configurable) feature the assistant brings
 
 	//	private final AiQueryService service;
-	private final ChatLanguageModel chatModel;
+	private final ChatModel chatModel;
 	private final SystemMessage metamodelPrompt;
 	private final ChatMemory chatMemory;
 	private final JpaMetamodel metamodel;
 	private final boolean structuredJson;
 
 	private HibernateAssistantLC4J(
-			ChatLanguageModel chatModel,
+			ChatModel chatModel,
 			ChatMemory chatMemory,
 			Metamodel metamodel,
 			PromptTemplate metamodelPromptTemplate,
@@ -157,7 +183,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 
 	private HibernateAssistantLC4J(Builder builder) {
 		this(
-				ensureNotNull( builder.chatModel, "ChatLanguageModel" ),
+				ensureNotNull( builder.chatModel, "ChatModel" ),
 				getOrDefault( builder.chatMemory, Builder::defaultChatMemory ),
 				ensureNotNull( builder.metamodel, "Metamodel" ),
 				getOrDefault( builder.metamodelPromptTemplate, METAMODEL_PROMPT_TEMPLATE ),
@@ -166,7 +192,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 	}
 
 	private static SystemMessage getMetamodelPrompt(PromptTemplate metamodelPromptTemplate, Metamodel metamodel) {
-		return metamodelPromptTemplate.apply( getDomainModelPrompt( metamodel, '"' ) ).toSystemMessage();
+		return metamodelPromptTemplate.apply( getDomainModelPrompt( metamodel ) ).toSystemMessage();
 	}
 
 	@Override
@@ -261,7 +287,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 				.contentInjector( DefaultContentInjector.builder().promptTemplate( INJECTOR_PROMPT_TEMPLATE ).build() )
 				.build();
 		final ConversationalRetrievalChain chain = ConversationalRetrievalChain.builder()
-				.chatLanguageModel( chatModel )
+				.chatModel( chatModel )
 				.chatMemory( chatMemory )
 				.retrievalAugmentor( rag )
 				.build();
@@ -302,7 +328,7 @@ public class HibernateAssistantLC4J implements HibernateAssistant {
 	 * a string representation of the response. The string will be created based on Hibernate's
 	 * knowledge of the domain model, but it will not print the entire object tree since that
 	 * would cause circularity problems. This is a best-effort attempt at providing a useful
-	 * string-representation based on data, mainly used to pass it back to a {@link ChatLanguageModel}
+	 * string-representation based on data, mainly used to pass it back to a {@link ChatModel}
 	 * like in {@link #executeQuery(SelectionQuery, SharedSessionContract)}.
 	 * <p>
 	 * If you wish to execute the query manually and obtain the structured results yourself,

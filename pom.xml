@@ -43,21 +43,20 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-ollama</artifactId>
-            <version>1.0.0-alpha1</version>
+            <version>1.0.0-beta5</version>
         </dependency>
         <!-- LangChain4j - OpenAI integration -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-open-ai</artifactId>
-            <version>1.0.0-alpha1</version>
+            <version>1.0.1</version>
         </dependency>
         <!-- LangChain4j - AI Services -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
-            <version>1.0.0-alpha1</version>
+            <version>1.0.1</version>
         </dependency>
-
 
         <dependency>
             <groupId>org.hibernate.orm</groupId>
@@ -114,4 +113,21 @@
         </dependency>
     </dependencies>
 
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.5.3</version>
+                    <configuration>
+                        <includes>
+                            <include>org/hibernate/assistant/model/**</include>
+                            <include>org/hibernate/assistant/serializer/**</include>
+                        </includes>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 </project>

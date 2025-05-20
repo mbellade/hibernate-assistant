@@ -4,7 +4,7 @@ import org.hibernate.assistant.HibernateAssistant;
 import org.hibernate.assistant.internal.lc4j.HibernateAssistantLC4J;
 
 import dev.langchain4j.memory.ChatMemory;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import jakarta.persistence.metamodel.Metamodel;
@@ -20,12 +20,10 @@ public class LanguageModels {
 	public static final String GRANITE_CODE_3b = "granite-code:3b";
 	public static final String LLAMA_32 = "llama3.2";
 	public static final String CODELLAMA = "codellama";
-	public static final String CODELLAMA_13B_INSTRUCT = "codellama:13b-instruct";
-	public static final String DEEPSEEK_R1_8B = "codellama:13b-instruct"; // distilled llama 8.03B
-	public static final String DEEPSEEK_R1_14B = "codellama:13b-instruct"; // distilled qwen2 14.8B
+	public static final String QWEN_25_CODER = "qwen2.5-coder";
 	public static final String GPT_4O_MINI = "gpt-4o-mini";
 
-	public static ChatLanguageModel testChatLanguageModel() {
+	public static ChatModel testChatModel() {
 		final String modelType = System.getProperty( "hibernate.assistant.model-type" );
 		if ( modelType != null ) {
 			final String baseUrl = System.getProperty( "hibernate.assistant.model-base-url" );
@@ -59,7 +57,7 @@ public class LanguageModels {
 		// default configuration if no system properties are found
 		return OllamaChatModel.builder()
 				.baseUrl( OLLAMA_BASE_URL )
-				.modelName( CODELLAMA )
+				.modelName( QWEN_25_CODER )
 				.supportedCapabilities( RESPONSE_FORMAT_JSON_SCHEMA )
 				.temperature( 0.0 )
 				.build();
@@ -71,7 +69,7 @@ public class LanguageModels {
 
 	public static HibernateAssistant testAssistant(Metamodel metamodel, ChatMemory memory) {
 		return HibernateAssistantLC4J.builder()
-				.chatModel( testChatLanguageModel() )
+				.chatModel( testChatModel() )
 				.metamodel( metamodel )
 				.chatMemory( memory )
 				.build();

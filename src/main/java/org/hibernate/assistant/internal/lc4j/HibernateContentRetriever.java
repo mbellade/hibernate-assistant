@@ -9,7 +9,7 @@ import org.hibernate.query.spi.SqmQuery;
 import org.jboss.logging.Logger;
 
 import dev.langchain4j.memory.ChatMemory;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.input.PromptTemplate;
 import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
@@ -38,12 +38,12 @@ public class HibernateContentRetriever implements ContentRetriever {
 	);
 
 	public static class Builder {
-		private ChatLanguageModel chatModel;
+		private ChatModel chatModel;
 		private ChatMemory chatMemory;
 		private PromptTemplate metamodelPromptTemplate;
 		private SessionFactory sessionFactory;
 
-		public Builder chatModel(ChatLanguageModel chatModel) {
+		public Builder chatModel(ChatModel chatModel) {
 			this.chatModel = chatModel;
 			return this;
 		}
@@ -77,7 +77,7 @@ public class HibernateContentRetriever implements ContentRetriever {
 	}
 
 	public HibernateContentRetriever(
-			ChatLanguageModel chatModel,
+			ChatModel chatModel,
 			ChatMemory chatMemory,
 			SessionFactory sessionFactory) {
 		this(
@@ -91,7 +91,7 @@ public class HibernateContentRetriever implements ContentRetriever {
 	}
 
 	public HibernateContentRetriever(
-			ChatLanguageModel chatModel,
+			ChatModel chatModel,
 			ChatMemory chatMemory,
 			PromptTemplate metamodelPromptTemplate,
 			SessionFactory sessionFactory) {
