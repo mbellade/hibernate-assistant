@@ -83,8 +83,7 @@ public class AssistantUtils {
 		final String description;
 		if ( idType != null ) {
 			final SingularAttribute<? super T, ?> id = identifiableType.getId( idType.getJavaType() );
-			description = "\"identifier\":{\"name\":\"" + id.getName() + "\"," +
-					"\"type\":\"" + id.getJavaType().getTypeName() + "\"},";
+			description = "\"identifierAttribute\":\"" + id.getName() + "\",";
 		}
 		else {
 			description = "";
